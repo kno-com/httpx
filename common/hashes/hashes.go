@@ -9,9 +9,9 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"regexp"
 
 	"github.com/mfonda/simhash"
+	"github.com/projectdiscovery/httpx/common/dedup"
 	"github.com/spaolacci/murmur3"
 )
 
@@ -60,13 +60,10 @@ func Sha512(data []byte) string {
 	return hex.EncodeToString(hash[:])
 }
 
-// simhashWordBoundary splits on word boundaries (same pattern as mfonda/simhash).
-var simhashWordBoundary = regexp.MustCompile(`[\w']+(?:\://[\w\./]+){0,1}`)
-
 // Simhash returns a simhash fingerprint of the given data using w=3 shingle
 // extraction. This aligns with the dedup package's default feature extraction.
 func Simhash(data []byte) string {
-	words := simhashWordBoundary.FindAll(bytes.ToLower(data), -1)
+	words := dedup.WordBoundary.FindAll(bytes.ToLower(data), -1)
 	if len(words) == 0 {
 		return "0"
 	}

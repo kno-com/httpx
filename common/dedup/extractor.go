@@ -15,8 +15,9 @@ type featureExtractor interface {
 	extract(data []byte) uint64
 }
 
-// wordBoundary splits on word boundaries (same pattern as mfonda/simhash).
-var wordBoundary = regexp.MustCompile(`[\w']+(?:\://[\w\./]+){0,1}`)
+// WordBoundary splits on word boundaries (same pattern as mfonda/simhash).
+// Exported so that common/hashes can share the same tokenizer.
+var WordBoundary = regexp.MustCompile(`[\w']+(?:\://[\w\./]+){0,1}`)
 
 // jsonKeyRe matches JSON object keys (double-quoted strings followed by colon).
 var jsonKeyRe = regexp.MustCompile(`"([^"\\]*(?:\\.[^"\\]*)*)"[ \t\n\r]*:`)
@@ -28,11 +29,11 @@ var jsonKeyRe = regexp.MustCompile(`"([^"\\]*(?:\\.[^"\\]*)*)"[ \t\n\r]*:`)
 type shingleExtractor struct{}
 
 func (shingleExtractor) extract(data []byte) uint64 {
-	words := wordBoundary.FindAll(bytes.ToLower(data), -1)
+	words := WordBoundary.FindAll(bytes.ToLower(data), -1)
 	if len(words) == 0 {
 		return 0
 	}
-	shingles := shingle(3, words)
+	shingles := simhash.Shingle(3, words)
 	return simhash.SimhashBytes(shingles)
 }
 
@@ -54,7 +55,7 @@ func (byteWindowExtractor) extract(data []byte) uint64 {
 	}
 	count := len(lower) - byteWindowSize + 1
 	windows := make([][]byte, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		windows[i] = lower[i : i+byteWindowSize]
 	}
 	return simhash.SimhashBytes(windows)
@@ -76,7 +77,7 @@ func (jsonKeyExtractor) extract(data []byte) uint64 {
 	for i, m := range matches {
 		keys[i] = bytes.ToLower(m[1])
 	}
-	shingles := shingle(3, keys)
+	shingles := simhash.Shingle(3, keys)
 	return simhash.SimhashBytes(shingles)
 }
 
@@ -113,27 +114,8 @@ func isMinified(data []byte) bool {
 	if len(data) <= 512 {
 		return false
 	}
-	wordCount := len(wordBoundary.FindAll(data, -1))
+	wordCount := len(WordBoundary.FindAll(data, -1))
 	ratio := float64(wordCount) / float64(len(data))
 	return ratio < 0.05
 }
 
-// shingle returns the w-shingling of the given set of byte slices.
-// Each shingle is the concatenation of w consecutive elements joined by a space.
-func shingle(w int, tokens [][]byte) [][]byte {
-	if w < 1 {
-		w = 1
-	}
-	if w == 1 {
-		return tokens
-	}
-	if w > len(tokens) {
-		w = len(tokens)
-	}
-	count := len(tokens) - w + 1
-	shingles := make([][]byte, count)
-	for i := 0; i < count; i++ {
-		shingles[i] = bytes.Join(tokens[i:i+w], []byte(" "))
-	}
-	return shingles
-}

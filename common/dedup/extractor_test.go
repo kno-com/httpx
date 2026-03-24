@@ -259,26 +259,3 @@ func TestIsMinified(t *testing.T) {
 	}
 }
 
-func TestShingle(t *testing.T) {
-	tokens := [][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d")}
-
-	tests := []struct {
-		name string
-		w    int
-		want []string
-	}{
-		{name: "w=1 identity", w: 1, want: []string{"a", "b", "c", "d"}},
-		{name: "w=2", w: 2, want: []string{"a b", "b c", "c d"}},
-		{name: "w=3", w: 3, want: []string{"a b c", "b c d"}},
-		{name: "w exceeds length", w: 10, want: []string{"a b c d"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := shingle(tt.w, tokens)
-			require.Len(t, got, len(tt.want))
-			for i, s := range got {
-				assert.Equal(t, tt.want[i], string(s))
-			}
-		})
-	}
-}
