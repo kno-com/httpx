@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -135,7 +136,9 @@ func New(options *Options) (*HTTPX, error) {
 	}
 	transport := &http.Transport{
 		DialContext:    httpx.Dialer.Dial,
-		DialTLSContext: httpx.Dialer.DialTLS,
+		DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return dialUTLS(ctx, network, addr)
+		},
 		MaxIdleConnsPerHost: -1,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,

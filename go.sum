@@ -92,8 +92,6 @@ github.com/chzyer/readline v1.5.1/go.mod h1:Eh+b79XXUwfKfcPLepksvw2tcLE/Ct21YObk
 github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
 github.com/chzyer/test v1.0.0/go.mod h1:2JlltgoNkt4TW/z9V/IzDdFaMTM2JPIi26O1pF38GC8=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
-github.com/cloudflare/cfssl v1.6.4 h1:NMOvfrEjFfC63K3SGXgAnFdsgkmiq4kATme5BfcqrO8=
-github.com/cloudflare/cfssl v1.6.4/go.mod h1:8b3CQMxfWPAeom3zBnGJ6sd+G1NkL5TXqmDXacb+1J0=
 github.com/cloudflare/circl v1.1.0/go.mod h1:prBCrKB9DV4poKZY1l9zBXg2QJY7mvgRvtMxxK7fi4I=
 github.com/cnf/structhash v0.0.0-20250313080605-df4c6cc74a9a h1:Ohw57yVY2dBTt+gsC6aZdteyxwlxfbtgkFEMTEkwgSw=
 github.com/cnf/structhash v0.0.0-20250313080605-df4c6cc74a9a/go.mod h1:pCxVEbcm3AMg7ejXyorUXi6HQCzOIBf7zEDVPtw0/U4=
@@ -166,8 +164,6 @@ github.com/golang/snappy v0.0.4 h1:yAGX7huGHXlcLOEtBnF4w7FQwA26wojNCwOYAEhLjQM=
 github.com/golang/snappy v0.0.4/go.mod h1:/XxbfmMg8lxefKM7IXC3fBNl/7bRcc72aCRzEWrmP2Q=
 github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
 github.com/google/btree v1.0.0/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
-github.com/google/certificate-transparency-go v1.3.2 h1:9ahSNZF2o7SYMaKaXhAumVEzXB2QaayzII9C8rv7v+A=
-github.com/google/certificate-transparency-go v1.3.2/go.mod h1:H5FpMUaGa5Ab2+KCYsxg6sELw3Flkl7pGZzWdBoYLXs=
 github.com/google/go-cmp v0.2.0/go.mod h1:oXzfMopK8JAjlY9xF4vHSVASa0yLyX7SntLO5aqRK0M=
 github.com/google/go-cmp v0.3.0/go.mod h1:8QqcDgzrUqlUb/G2PQTWiueGozuR1884gddMywk6iLU=
 github.com/google/go-cmp v0.3.1/go.mod h1:8QqcDgzrUqlUb/G2PQTWiueGozuR1884gddMywk6iLU=
@@ -364,8 +360,6 @@ github.com/projectdiscovery/retryablehttp-go v1.3.6 h1:dLb0/YVX+oX70gpWxN5GXT8pC
 github.com/projectdiscovery/retryablehttp-go v1.3.6/go.mod h1:tKVxmL4ixWy1MjYk5GJvFL0Cp10fnQgSp2F6bSBEypI=
 github.com/projectdiscovery/stringsutil v0.0.2 h1:uzmw3IVLJSMW1kEg8eCStG/cGbYYZAja8BH3LqqJXMA=
 github.com/projectdiscovery/stringsutil v0.0.2/go.mod h1:EJ3w6bC5fBYjVou6ryzodQq37D5c6qbAYQpGmAy+DC0=
-github.com/projectdiscovery/tlsx v1.2.2 h1:Y96QBqeD2anpzEtBl4kqNbwzXh2TrzJuXfgiBLvK+SE=
-github.com/projectdiscovery/tlsx v1.2.2/go.mod h1:ZJl9F1sSl0sdwE+lR0yuNHVX4Zx6tCSTqnNxnHCFZB4=
 github.com/projectdiscovery/useragent v0.0.107 h1:45gSBda052fv2Gtxtnpx7cu2rWtUpZEQRGAoYGP6F5M=
 github.com/projectdiscovery/useragent v0.0.107/go.mod h1:yv5ZZLDT/kq6P+NvBcCPq6sjEVQtZGgO+OvvHzZ+WtY=
 github.com/projectdiscovery/utils v0.10.0 h1:E3nMm0h3LWt2bbnpRd8Whyj/y0DrMJKYx2zV8gqFDF0=
