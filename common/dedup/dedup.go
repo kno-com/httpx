@@ -39,13 +39,15 @@ func WithStripDynamic(enabled bool) Option {
 // Deduplicator detects exact and near-duplicate documents using simhash
 // fingerprints. It is safe for concurrent use.
 type Deduplicator struct {
-	// mu guards index and all mutable state below.
-	mu            sync.RWMutex
-	index         map[uint64]struct{}
-	threshold     uint8
-	stripDynamic  bool
-	preprocessor  func([]byte) []byte
-	extractFeatures func([]byte) uint64
+	// Immutable after construction.
+	threshold      uint8
+	stripDynamic   bool
+	preprocessor   func([]byte) []byte
+	featureHasher  func([]byte) uint64
+
+	// mu guards index.
+	mu    sync.RWMutex
+	index map[uint64]struct{}
 }
 
 // New creates a Deduplicator with the given options. Zero-value defaults are:
@@ -55,20 +57,17 @@ func New(opts ...Option) *Deduplicator {
 		index:        make(map[uint64]struct{}),
 		threshold:    defaultThreshold,
 		stripDynamic: true,
+		// Placeholder preprocessor — no-op until Task #5 replaces it.
+		preprocessor: func(b []byte) []byte { return b },
+		// Placeholder feature hasher — uses mfonda/simhash word feature set
+		// until Task #3 replaces it with shingle extraction.
+		featureHasher: func(b []byte) uint64 {
+			return simhash.Simhash(simhash.NewWordFeatureSet(b))
+		},
 	}
 	for _, o := range opts {
 		o(d)
 	}
-
-	// Placeholder preprocessor — no-op until Task #5 replaces it.
-	d.preprocessor = func(b []byte) []byte { return b }
-
-	// Placeholder feature extractor — uses mfonda/simhash word feature set
-	// until Task #3 replaces it with shingle extraction.
-	d.extractFeatures = func(b []byte) uint64 {
-		return simhash.Simhash(simhash.NewWordFeatureSet(b))
-	}
-
 	return d
 }
 
@@ -77,7 +76,7 @@ func New(opts ...Option) *Deduplicator {
 // match against it.
 func (d *Deduplicator) IsDuplicate(raw []byte) bool {
 	data := d.preprocessor(raw)
-	fp := d.extractFeatures(data)
+	fp := d.featureHasher(data)
 
 	d.mu.RLock()
 	dup := d.isDup(fp)

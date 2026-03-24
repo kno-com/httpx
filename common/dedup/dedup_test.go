@@ -17,7 +17,7 @@ func TestNew_Defaults(t *testing.T) {
 	assert.True(t, d.stripDynamic, "default stripDynamic should be true")
 	assert.NotNil(t, d.index)
 	assert.NotNil(t, d.preprocessor)
-	assert.NotNil(t, d.extractFeatures)
+	assert.NotNil(t, d.featureHasher)
 }
 
 func TestNew_WithOptions(t *testing.T) {
@@ -54,24 +54,6 @@ func TestIsDuplicate_ExactDuplicate(t *testing.T) {
 
 	second := d.IsDuplicate(body)
 	assert.True(t, second, "identical content should be detected as duplicate")
-}
-
-func TestIsDuplicate_NearDuplicate(t *testing.T) {
-	d := New()
-
-	original := []byte("the quick brown fox jumps over the lazy dog near the river bank on a sunny day")
-	// A near-duplicate differs by a small amount of content.
-	nearDup := []byte("the quick brown fox jumps over the lazy dog near the river bank on a cloudy day")
-
-	first := d.IsDuplicate(original)
-	require.False(t, first)
-
-	second := d.IsDuplicate(nearDup)
-	// Near-duplicates should produce fingerprints within the default threshold.
-	// If the specific wording doesn't trigger near-dup detection via simhash,
-	// we verify the mechanism works by checking the internal state.
-	// We'll verify the mechanism directly below using controlled fingerprints.
-	_ = second
 }
 
 func TestIsDuplicate_NonDuplicate(t *testing.T) {
@@ -117,7 +99,7 @@ func TestIsDuplicate_CustomThreshold(t *testing.T) {
 				"flipBits should produce exactly the requested distance")
 
 			// Override extractor to return our controlled fingerprint.
-			d.extractFeatures = func([]byte) uint64 { return candidateFP }
+			d.featureHasher = func([]byte) uint64 { return candidateFP }
 
 			got := d.IsDuplicate([]byte("anything"))
 			assert.Equal(t, tt.wantDup, got)
@@ -131,12 +113,12 @@ func TestIsDuplicate_ConcurrentSafety(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
-	for i := 0; i < goroutines; i++ {
-		go func(n int) {
+	for i := range goroutines {
+		go func() {
 			defer wg.Done()
-			body := []byte(fmt.Sprintf("unique document number %d with enough words to form a feature set", n))
+			body := fmt.Appendf(nil, "unique document number %d with enough words to form a feature set", i)
 			d.IsDuplicate(body)
-		}(i)
+		}()
 	}
 	wg.Wait()
 
@@ -156,7 +138,7 @@ func TestIsDuplicate_TOCTOU(t *testing.T) {
 	results := make(chan bool, 2)
 	var wg sync.WaitGroup
 	wg.Add(2)
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		go func() {
 			defer wg.Done()
 			results <- d.IsDuplicate(body)
@@ -179,7 +161,7 @@ func TestIsDuplicate_TOCTOU(t *testing.T) {
 
 // flipBits returns v with exactly n of the lowest bits flipped.
 func flipBits(v uint64, n uint8) uint64 {
-	for i := uint8(0); i < n; i++ {
+	for i := range n {
 		v ^= 1 << i
 	}
 	return v
