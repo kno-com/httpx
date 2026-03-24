@@ -59,7 +59,7 @@ func New(opts ...Option) *Deduplicator {
 		idx:          newBandIndex(),
 		threshold:    defaultThreshold,
 		stripDynamic: true,
-		// Placeholder preprocessor — no-op until Task #5 replaces it.
+		// Default no-op preprocessor, replaced below when stripDynamic is true.
 		preprocessor: func(b []byte) []byte { return b },
 	}
 	for _, o := range opts {
