@@ -68,6 +68,10 @@ func New(opts ...Option) *Deduplicator {
 	if d.threshold > maxGuaranteedThreshold {
 		d.threshold = maxGuaranteedThreshold
 	}
+	// Replace the no-op preprocessor with dynamic-content stripping when enabled.
+	if d.stripDynamic {
+		d.preprocessor = stripDynamicTokens
+	}
 	// Wire featureHasher to use the content-type-aware extractor system.
 	// Capture contentType once so the closure does not hold a pointer to d.
 	ct := d.contentType
