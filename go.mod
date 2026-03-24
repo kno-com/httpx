@@ -11,7 +11,7 @@ require (
 	github.com/go-rod/rod v0.116.2
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/hbakhtiyor/strsim v0.0.0-20190107154042-4d2bbb273edf
-	github.com/hdm/jarm-go v0.0.7
+	github.com/hdm/jarm-go v0.0.7 // indirect
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/logrusorgru/aurora v2.0.3+incompatible
 	github.com/mfonda/simhash v0.0.0-20151007195837-79f94a1100d6
@@ -33,16 +33,15 @@ require (
 	github.com/projectdiscovery/ratelimit v0.0.84
 	github.com/projectdiscovery/rawhttp v0.1.90
 	github.com/projectdiscovery/retryablehttp-go v1.3.6
-	github.com/projectdiscovery/tlsx v1.2.2
 	github.com/projectdiscovery/useragent v0.0.107
 	github.com/projectdiscovery/utils v0.10.0
 	github.com/projectdiscovery/wappalyzergo v0.2.73
 	github.com/rs/xid v1.6.0
 	github.com/spaolacci/murmur3 v1.1.0
 	github.com/stretchr/testify v1.11.1
-	github.com/zmap/zcrypto v0.0.0-20240803002437-3a861682ac77
+	github.com/zmap/zcrypto v0.0.0-20240803002437-3a861682ac77 // indirect
 	go.etcd.io/bbolt v1.4.0 // indirect
-	go.uber.org/multierr v1.11.0
+	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20250911091902-df9299821621
 	golang.org/x/net v0.52.0
 	golang.org/x/sys v0.42.0 // indirect
@@ -57,6 +56,7 @@ require (
 	github.com/happyhackingspace/dit v0.0.14
 	github.com/lib/pq v1.12.0
 	github.com/projectdiscovery/awesome-search-queries v0.0.0-20260104120501-961ef30f7193
+	github.com/refraction-networking/utls v1.8.2
 	github.com/seh-msft/burpxml v1.0.1
 	github.com/weppos/publicsuffix-go v0.50.3
 	go.mongodb.org/mongo-driver v1.17.9
@@ -85,7 +85,6 @@ require (
 	github.com/charmbracelet/lipgloss v0.13.0 // indirect
 	github.com/charmbracelet/x/ansi v0.3.2 // indirect
 	github.com/cheggaaa/pb/v3 v3.1.6 // indirect
-	github.com/cloudflare/cfssl v1.6.4 // indirect
 	github.com/cnf/structhash v0.0.0-20250313080605-df4c6cc74a9a // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
@@ -97,7 +96,6 @@ require (
 	github.com/felixge/fgprof v0.9.5 // indirect
 	github.com/gaissmai/bart v0.26.1 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
-	github.com/google/certificate-transparency-go v1.3.2 // indirect
 	github.com/google/go-github/v30 v30.1.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/pprof v0.0.0-20240227163752-401108e1b7e7 // indirect
@@ -138,7 +136,6 @@ require (
 	github.com/projectdiscovery/gostruct v0.0.2 // indirect
 	github.com/projectdiscovery/machineid v0.0.0-20250715113114-c77eb3567582 // indirect
 	github.com/projectdiscovery/retryabledns v1.0.113 // indirect
-	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d // indirect

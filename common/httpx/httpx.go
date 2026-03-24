@@ -16,7 +16,6 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/projectdiscovery/cdncheck"
 	"github.com/projectdiscovery/fastdialer/fastdialer"
-	"github.com/projectdiscovery/fastdialer/fastdialer/ja3/impersonate"
 	"github.com/projectdiscovery/httpx/common/httputilz"
 	"github.com/projectdiscovery/networkpolicy"
 	"github.com/projectdiscovery/rawhttp"
@@ -58,11 +57,9 @@ func New(options *Options) (*HTTPX, error) {
 		fastdialerOpts.NetworkPolicy = options.NetworkPolicy
 	}
 	fastdialerOpts.WithDialerHistory = true
-	fastdialerOpts.WithZTLS = options.ZTLS
 	if len(options.Resolvers) > 0 {
 		fastdialerOpts.BaseResolvers = options.Resolvers
 	}
-	fastdialerOpts.SNIName = options.SniName
 	dialer, err := fastdialer.NewDialer(fastdialerOpts)
 	if err != nil {
 		return nil, fmt.Errorf("could not create resolver cache: %s", err)
@@ -138,12 +135,9 @@ func New(options *Options) (*HTTPX, error) {
 		}
 	}
 	transport := &http.Transport{
-		DialContext: httpx.Dialer.Dial,
+		DialContext:    httpx.Dialer.Dial,
 		DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			if options.TlsImpersonate {
-				return httpx.Dialer.DialTLSWithConfigImpersonate(ctx, network, addr, &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS10}, impersonate.Random, nil)
-			}
-			return httpx.Dialer.DialTLS(ctx, network, addr)
+			return dialUTLS(ctx, network, addr)
 		},
 		MaxIdleConnsPerHost: -1,
 		TLSClientConfig: &tls.Config{
@@ -157,10 +151,6 @@ func New(options *Options) (*HTTPX, error) {
 		// disable http2
 		_ = os.Setenv("GODEBUG", "http2client=0")
 		transport.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
-	}
-
-	if httpx.Options.SniName != "" {
-		transport.TLSClientConfig.ServerName = httpx.Options.SniName
 	}
 
 	if httpx.Options.HTTPProxy != "" {
@@ -193,9 +183,6 @@ func New(options *Options) (*HTTPX, error) {
 			MinVersion:         tls.VersionTLS10,
 		},
 		AllowHTTP: true,
-	}
-	if httpx.Options.SniName != "" {
-		transport2.TLSClientConfig.ServerName = httpx.Options.SniName
 	}
 	httpx.client2 = &http.Client{
 		Transport: transport2,
@@ -324,15 +311,6 @@ get_response:
 		resp.Words = len(strings.Split(respbodystr, " "))
 		// number of lines
 		resp.Lines = len(strings.Split(strings.TrimSpace(respbodystr), "\n"))
-	}
-
-	if !h.Options.Unsafe && h.Options.TLSGrab {
-		if h.Options.ZTLS {
-			resp.TLSData = h.ZTLSGrab(httpresp)
-		} else {
-			// extracts TLS data if any
-			resp.TLSData = h.TLSGrab(httpresp)
-		}
 	}
 
 	if h.Options.ExtractFqdn {

@@ -71,7 +71,6 @@ type ScanOptions struct {
 	ResponseInStdout          bool
 	Base64ResponseInStdout    bool
 	ChainInStdout             bool
-	TLSProbe                  bool
 	CSPProbe                  bool
 	VHostInput                bool
 	OutputContentType         bool
@@ -137,7 +136,6 @@ func (s *ScanOptions) Clone() *ScanOptions {
 		ResponseInStdout:          s.ResponseInStdout,
 		Base64ResponseInStdout:    s.Base64ResponseInStdout,
 		ChainInStdout:             s.ChainInStdout,
-		TLSProbe:                  s.TLSProbe,
 		CSPProbe:                  s.CSPProbe,
 		OutputContentType:         s.OutputContentType,
 		Unsafe:                    s.Unsafe,
@@ -248,7 +246,6 @@ type Options struct {
 	FollowHostRedirects       bool
 	MaxRedirects              int
 	OutputMethod              bool
-	TLSProbe                  bool
 	CSPProbe                  bool
 	OutputContentType         bool
 	OutputIP                  bool
@@ -268,7 +265,6 @@ type Options struct {
 	CPEDetect                 bool
 	WordPress                 bool
 	CustomFingerprintFile     string
-	TLSGrab                   bool
 	protocol                  string
 	ShowStatistics            bool
 	StatsInterval             int
@@ -298,7 +294,6 @@ type Options struct {
 	OutputFilterFavicon       goflags.StringSlice
 	OutputMatchFavicon        goflags.StringSlice
 	LeaveDefaultPorts         bool
-	ZTLS                      bool
 	OutputLinesCount          bool
 	OutputMatchLinesCount     string
 	matchLinesCount           []int
@@ -312,11 +307,9 @@ type Options struct {
 	filterWordsCount          []int
 	Hashes                    string
 	SimhashThreshold          int
-	Jarm                      bool
 	Asn                       bool
 	OutputMatchCdn            goflags.StringSlice
 	OutputFilterCdn           goflags.StringSlice
-	SniName                   string
 	OutputMatchResponseTime   string
 	OutputFilterResponseTime  string
 	HealthCheck               bool
@@ -332,7 +325,6 @@ type Options struct {
 	NoDecode             bool
 	Screenshot           bool
 	UseInstalledChrome   bool
-	TlsImpersonate       bool
 	DisableStdin         bool
 	HttpApiEndpoint      string
 	NoScreenshotBytes    bool
@@ -403,7 +395,6 @@ func ParseOptions() *Options {
 		flagSet.BoolVar(&options.Favicon, "favicon", false, "display mmh3 hash for '/favicon.ico' file"),
 		flagSet.StringVar(&options.Hashes, "hash", "", "display response body hash (supported: md5,mmh3,simhash,sha1,sha256,sha512)"),
 		flagSet.IntVar(&options.SimhashThreshold, "simhash-threshold", 3, "simhash near-duplicate threshold (0-3)"),
-		flagSet.BoolVar(&options.Jarm, "jarm", false, "display jarm fingerprint hash"),
 		flagSet.BoolVarP(&options.OutputResponseTime, "response-time", "rt", false, "display response time"),
 		flagSet.BoolVarP(&options.OutputLinesCount, "line-count", "lc", false, "display response body line count"),
 		flagSet.BoolVarP(&options.OutputWordsCount, "word-count", "wc", false, "display response body word count"),
@@ -483,9 +474,7 @@ func ParseOptions() *Options {
 		flagSet.BoolVarP(&options.ProbeAllIPS, "probe-all-ips", "pa", false, "probe all the ips associated with same host"),
 		flagSet.VarP(&options.CustomPorts, "ports", "p", "ports to probe (nmap syntax: eg http:1,2-10,11,https:80)"),
 		flagSet.StringVar(&options.RequestURIs, "path", "", "path or list of paths to probe (comma-separated, file)"),
-		flagSet.BoolVar(&options.TLSProbe, "tls-probe", false, "send http probes on the extracted TLS domains (dns_name)"),
 		flagSet.BoolVar(&options.CSPProbe, "csp-probe", false, "send http probes on the extracted CSP domains"),
-		flagSet.BoolVar(&options.TLSGrab, "tls-grab", false, "perform TLS(SSL) data grabbing"),
 		flagSet.BoolVar(&options.Pipeline, "pipeline", false, "probe and display server supporting HTTP1.1 pipeline"),
 		flagSet.BoolVar(&options.HTTP2Probe, "http2", false, "probe and display server supporting HTTP2"),
 		flagSet.BoolVar(&options.VHost, "vhost", false, "probe and display server supporting VHOST"),
@@ -530,7 +519,6 @@ func ParseOptions() *Options {
 		flagSet.StringSliceVarP(&options.Resolvers, "resolvers", "r", nil, "list of custom resolver (file or comma separated)", goflags.NormalizedStringSliceOptions),
 		flagSet.Var(&options.Allow, "allow", "allowed list of IP/CIDR's to process (file or comma separated)"),
 		flagSet.Var(&options.Deny, "deny", "denied list of IP/CIDR's to process (file or comma separated)"),
-		flagSet.StringVarP(&options.SniName, "sni-name", "sni", "", "custom TLS SNI name"),
 		flagSet.BoolVar(&options.RandomAgent, "random-agent", true, "enable Random User-Agent to use"),
 		flagSet.BoolVar(&options.AutoReferer, "auto-referer", false, "set the Referer header to the current URL"),
 		flagSet.VarP(&options.CustomHeaders, "header", "H", "custom http headers to send with request"),
@@ -547,9 +535,7 @@ func ParseOptions() *Options {
 		flagSet.BoolVarP(&options.Stream, "stream", "s", false, "stream mode - start elaborating input targets without sorting"),
 		flagSet.BoolVarP(&options.SkipDedupe, "skip-dedupe", "sd", false, "disable dedupe input items (only used with stream mode)"),
 		flagSet.BoolVarP(&options.LeaveDefaultPorts, "leave-default-ports", "ldp", false, "leave default http/https ports in host header (eg. http://host:80 - https://host:443"),
-		flagSet.BoolVar(&options.ZTLS, "ztls", false, "use ztls library with autofallback to standard one for tls13"),
 		flagSet.BoolVar(&options.NoDecode, "no-decode", false, "avoid decoding body"),
-		flagSet.BoolVarP(&options.TlsImpersonate, "tls-impersonate", "tlsi", false, "enable experimental client hello (ja3) tls randomization"),
 		flagSet.BoolVar(&options.DisableStdin, "no-stdin", false, "Disable Stdin processing"),
 		flagSet.StringVarP(&options.HttpApiEndpoint, "http-api-endpoint", "hae", "", "experimental http api endpoint"),
 		flagSet.StringVarP(&options.SecretFile, "secret-file", "sf", "", "path to the secret file for authentication"),

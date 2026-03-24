@@ -4,7 +4,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/projectdiscovery/tlsx/pkg/tlsx/clients"
 	httputil "github.com/projectdiscovery/utils/http"
 )
 
@@ -20,7 +19,6 @@ type Response struct {
 	RawHeaders    string
 	Words         int
 	Lines         int
-	TLSData       *clients.Response
 	CSPData       *CSPData
 	BodyDomains   *BodyDomain
 	HTTP2         bool
