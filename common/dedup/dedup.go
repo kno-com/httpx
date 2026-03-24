@@ -4,11 +4,6 @@
 // a single IsDuplicate call.
 package dedup
 
-import (
-	"math/bits"
-	"sync"
-)
-
 // defaultThreshold is the maximum Hamming distance at which two fingerprints
 // are considered near-duplicates.
 const defaultThreshold uint8 = 3
@@ -52,16 +47,14 @@ type Deduplicator struct {
 	preprocessor   func([]byte) []byte
 	featureHasher  func([]byte) uint64
 
-	// mu guards index.
-	mu    sync.RWMutex
-	index map[uint64]struct{}
+	idx *bandIndex
 }
 
 // New creates a Deduplicator with the given options. Zero-value defaults are:
 // threshold=3, stripDynamic=true.
 func New(opts ...Option) *Deduplicator {
 	d := &Deduplicator{
-		index:        make(map[uint64]struct{}),
+		idx:          newBandIndex(),
 		threshold:    defaultThreshold,
 		stripDynamic: true,
 		// Placeholder preprocessor — no-op until Task #5 replaces it.
@@ -86,39 +79,11 @@ func (d *Deduplicator) IsDuplicate(raw []byte) bool {
 	data := d.preprocessor(raw)
 	fp := d.featureHasher(data)
 
-	d.mu.RLock()
-	dup := d.isDup(fp)
-	d.mu.RUnlock()
-
-	if dup {
+	// Fast read-only check.
+	if d.idx.hasNearDuplicate(fp, d.threshold) {
 		return true
 	}
 
-	// Promote to write lock and re-check to avoid TOCTOU races.
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	if d.isDup(fp) {
-		return true
-	}
-
-	d.index[fp] = struct{}{}
-	return false
-}
-
-// isDup performs a linear Hamming scan over the index. The caller must hold
-// at least a read lock on d.mu. This will be replaced by a band-partitioned
-// index in Task #4.
-func (d *Deduplicator) isDup(fp uint64) bool {
-	for stored := range d.index {
-		if hammingDistance(stored, fp) <= d.threshold {
-			return true
-		}
-	}
-	return false
-}
-
-// hammingDistance returns the number of bit positions where a and b differ.
-func hammingDistance(a, b uint64) uint8 {
-	return uint8(bits.OnesCount64(a ^ b))
+	// Atomic check-and-insert under write lock to avoid TOCTOU races.
+	return d.idx.addIfAbsent(fp, d.threshold)
 }

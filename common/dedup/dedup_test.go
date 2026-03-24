@@ -15,7 +15,7 @@ func TestNew_Defaults(t *testing.T) {
 	require.NotNil(t, d)
 	assert.Equal(t, uint8(3), d.threshold, "default threshold should be 3")
 	assert.True(t, d.stripDynamic, "default stripDynamic should be true")
-	assert.NotNil(t, d.index)
+	assert.NotNil(t, d.idx)
 	assert.NotNil(t, d.preprocessor)
 	assert.NotNil(t, d.featureHasher)
 }
@@ -88,9 +88,7 @@ func TestIsDuplicate_CustomThreshold(t *testing.T) {
 
 			// Seed the index with a known fingerprint.
 			baseFP := uint64(0xDEADBEEFCAFEBABE)
-			d.mu.Lock()
-			d.index[baseFP] = struct{}{}
-			d.mu.Unlock()
+			d.idx.add(baseFP)
 
 			// Build a fingerprint at exactly tt.distance bits away.
 			candidateFP := flipBits(baseFP, tt.distance)
@@ -123,9 +121,7 @@ func TestIsDuplicate_ConcurrentSafety(t *testing.T) {
 	wg.Wait()
 
 	// Verify the index was populated — at least some entries should exist.
-	d.mu.RLock()
-	count := len(d.index)
-	d.mu.RUnlock()
+	count := d.idx.size()
 	assert.Greater(t, count, 0, "index should have entries after concurrent inserts")
 }
 
