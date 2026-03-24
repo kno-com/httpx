@@ -44,8 +44,6 @@ type Options struct {
 	RespectHSTS          bool
 	MaxRedirects         int
 	Unsafe               bool
-	TLSGrab              bool
-	ZTLS                 bool
 	// VHOSTs options
 	VHostIgnoreStatusCode     bool
 	VHostIgnoreContentLength  bool
@@ -57,8 +55,6 @@ type Options struct {
 	UnsafeURI                 string
 	Resolvers                 []string
 	customCookies             []*http.Cookie
-	SniName                   string
-	TlsImpersonate            bool
 	NetworkPolicy             *networkpolicy.NetworkPolicy
 	CDNCheckClient            *cdncheck.Client
 	Protocol                  Proto

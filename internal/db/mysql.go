@@ -98,7 +98,6 @@ func (m *mysqlDatabase) EnsureSchema(ctx context.Context) error {
 			favicon_md5 VARCHAR(32),
 			favicon_path TEXT,
 			favicon_url TEXT,
-			jarm_hash VARCHAR(62),
 
 			-- CDN info
 			cdn BOOLEAN,
@@ -107,9 +106,6 @@ func (m *mysqlDatabase) EnsureSchema(ctx context.Context) error {
 
 			-- ASN info
 			asn JSON,
-
-			-- TLS data
-			tls JSON,
 
 			-- CSP data
 			csp JSON,
@@ -187,8 +183,8 @@ func (m *mysqlDatabase) InsertBatch(ctx context.Context, results []runner.Result
 			status_code, content_length, content_type, title, webserver, response_time,
 			location, body, body_preview, raw_header, request,
 			host_ip, a, aaaa, cname, resolvers, body_fqdn, body_domains, sni,
-			tech, hash, favicon, favicon_md5, favicon_path, favicon_url, jarm_hash,
-			cdn, cdn_name, cdn_type, asn, tls, csp,
+			tech, hash, favicon, favicon_md5, favicon_path, favicon_url,
+			cdn, cdn_name, cdn_type, asn, csp,
 			failed, error, websocket, http2, pipeline, vhost,
 			words, `+"`lines`"+`, header, extracts, extract_regex,
 			chain, chain_status_codes,
@@ -199,8 +195,8 @@ func (m *mysqlDatabase) InsertBatch(ctx context.Context, results []runner.Result
 			?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?, ?, ?, ?,
-			?, ?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
 			?, ?,
@@ -226,7 +222,6 @@ func (m *mysqlDatabase) InsertBatch(ctx context.Context, results []runner.Result
 		techJSON, _ := json.Marshal(r.Technologies)
 		hashJSON, _ := json.Marshal(r.Hashes)
 		asnJSON, _ := json.Marshal(r.ASN)
-		tlsJSON, _ := json.Marshal(r.TLSData)
 		cspJSON, _ := json.Marshal(r.CSPData)
 		headerJSON, _ := json.Marshal(r.ResponseHeaders)
 		extractsJSON, _ := json.Marshal(r.Extracts)
@@ -242,8 +237,8 @@ func (m *mysqlDatabase) InsertBatch(ctx context.Context, results []runner.Result
 			r.StatusCode, r.ContentLength, r.ContentType, r.Title, r.WebServer, r.ResponseTime,
 			r.Location, r.ResponseBody, r.BodyPreview, r.RawHeaders, r.Request,
 			r.HostIP, aJSON, aaaaJSON, cnameJSON, resolversJSON, fqdnJSON, domainsJSON, r.SNI,
-			techJSON, hashJSON, r.FavIconMMH3, r.FavIconMD5, r.FaviconPath, r.FaviconURL, r.JarmHash,
-			r.CDN, r.CDNName, r.CDNType, asnJSON, tlsJSON, cspJSON,
+			techJSON, hashJSON, r.FavIconMMH3, r.FavIconMD5, r.FaviconPath, r.FaviconURL,
+			r.CDN, r.CDNName, r.CDNType, asnJSON, cspJSON,
 			r.Failed, r.Error, r.WebSocket, r.HTTP2, r.Pipeline, r.VHost,
 			r.Words, r.Lines, headerJSON, extractsJSON, extractRegexJSON,
 			chainJSON, chainStatusJSON,

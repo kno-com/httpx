@@ -13,7 +13,6 @@ import (
 	"github.com/projectdiscovery/dsl"
 	"github.com/projectdiscovery/gologger"
 	"github.com/projectdiscovery/retryablehttp-go"
-	"github.com/projectdiscovery/tlsx/pkg/tlsx/clients"
 	mapsutil "github.com/projectdiscovery/utils/maps"
 	wappalyzer "github.com/projectdiscovery/wappalyzergo"
 
@@ -38,7 +37,6 @@ type Result struct {
 	ASN                *AsnResponse                  `json:"asn,omitempty" csv:"-" md:"-" mapstructure:"asn"`
 	Err                error                         `json:"-" csv:"-" md:"-" mapstructure:"-"`
 	CSPData            *httpx.CSPData                `json:"csp,omitempty" csv:"-" md:"-" mapstructure:"csp"`
-	TLSData            *clients.Response             `json:"tls,omitempty" csv:"-" md:"-" mapstructure:"tls"`
 	Hashes             map[string]interface{}        `json:"hash,omitempty" csv:"-" md:"-" mapstructure:"hash"`
 	ExtractRegex       []string                      `json:"extract_regex,omitempty" csv:"extract_regex" md:"extract_regex" mapstructure:"extract_regex"`
 	CDNName            string                        `json:"cdn_name,omitempty" csv:"cdn_name" md:"cdn_name" mapstructure:"cdn_name"`
@@ -70,7 +68,6 @@ type Result struct {
 	RawHeaders         string                        `json:"raw_header,omitempty" csv:"-" md:"-" mapstructure:"raw_header"`
 	Request            string                        `json:"request,omitempty" csv:"-" md:"-" mapstructure:"request"`
 	ResponseTime       string                        `json:"time,omitempty" csv:"time" md:"time" mapstructure:"time"`
-	JarmHash           string                        `json:"jarm_hash,omitempty" csv:"jarm_hash" md:"jarm_hash" mapstructure:"jarm_hash"`
 	ChainStatusCodes   []int                         `json:"chain_status_codes,omitempty" csv:"chain_status_codes" md:"chain_status_codes" mapstructure:"chain_status_codes"`
 	A                  []string                      `json:"a,omitempty" csv:"a" md:"a" mapstructure:"a"`
 	AAAA               []string                      `json:"aaaa,omitempty" csv:"aaaa" md:"aaaa" mapstructure:"aaaa"`
@@ -136,7 +133,7 @@ func dslVariables() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	vars := []string{"header_md5", "header_mmh3", "header_sha256", "header_simhash", "body_md5", "body_mmh3", "body_sha256", "body_simhash"}
+	vars := []string{"header_md5", "header_mmh3", "header_sha256", "body_md5", "body_mmh3", "body_sha256", "body_simhash"}
 	mapsutil.Walk(m, func(k string, v any) {
 		vars = append(vars, k)
 	})

@@ -30,11 +30,10 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/corona10/goimagehash"
 	"github.com/gocarina/gocsv"
-	"github.com/mfonda/simhash"
 	asnmap "github.com/projectdiscovery/asnmap/libs"
 	"github.com/projectdiscovery/fastdialer/fastdialer"
 	"github.com/projectdiscovery/httpx/common/customextract"
-	"github.com/projectdiscovery/httpx/common/hashes/jarm"
+	"github.com/projectdiscovery/httpx/common/dedup"
 	"github.com/projectdiscovery/httpx/common/inputformats"
 	"github.com/happyhackingspace/dit"
 	"github.com/projectdiscovery/httpx/common/authprovider"
@@ -69,7 +68,6 @@ import (
 	"github.com/projectdiscovery/httpx/common/stringz"
 	"github.com/projectdiscovery/mapcidr"
 	"github.com/projectdiscovery/rawhttp"
-	converstionutil "github.com/projectdiscovery/utils/conversion"
 	errkit "github.com/projectdiscovery/utils/errkit"
 	fileutil "github.com/projectdiscovery/utils/file"
 	pdhttputil "github.com/projectdiscovery/utils/http"
@@ -80,6 +78,7 @@ import (
 
 // Runner is a client for running the enumeration process.
 type Runner struct {
+	seenMux sync.Mutex
 	options            *Options
 	hp                 *httpx.HTTPX
 	wappalyzer         *wappalyzer.Wappalyze
@@ -94,7 +93,7 @@ type Runner struct {
 	browser            *Browser
 	ditClassifier *dit.Classifier
 	pHashClusters      []pHashCluster
-	simHashes          gcache.Cache[uint64, struct{}] // Include simHashes for efficient duplicate detection
+	dedup              *dedup.Deduplicator
 	httpApiEndpoint    *Server
 	authProvider       authprovider.AuthProvider
 	interruptCh        chan struct{}
@@ -196,8 +195,6 @@ func New(options *Options) (*Runner, error) {
 	httpxOptions.NetworkPolicy = np
 	httpxOptions.CDNCheckClient = options.CDNCheckClient
 
-	// Enables automatically tlsgrab if tlsprobe is requested
-	httpxOptions.TLSGrab = options.TLSGrab || options.TLSProbe
 	httpxOptions.Timeout = time.Duration(options.Timeout) * time.Second
 	httpxOptions.RetryMax = options.Retries
 	httpxOptions.FollowRedirects = options.FollowRedirects
@@ -225,7 +222,6 @@ func New(options *Options) (*Runner, error) {
 	} else {
 		httpxOptions.AutoReferer = options.AutoReferer
 	}
-	httpxOptions.ZTLS = options.ZTLS
 	httpxOptions.MaxResponseBodySizeToSave = int64(options.MaxResponseBodySizeToSave)
 	httpxOptions.MaxResponseBodySizeToRead = int64(options.MaxResponseBodySizeToRead)
 	// adjust response size saved according to the max one read by the server
@@ -233,7 +229,6 @@ func New(options *Options) (*Runner, error) {
 		httpxOptions.MaxResponseBodySizeToSave = httpxOptions.MaxResponseBodySizeToRead
 	}
 	httpxOptions.Resolvers = options.Resolvers
-	httpxOptions.TlsImpersonate = options.TlsImpersonate
 	httpxOptions.Protocol = httpx.Proto(options.Protocol)
 
 	var key, value string
@@ -254,8 +249,6 @@ func New(options *Options) (*Runner, error) {
 		value = strings.TrimSpace(tokens[1])
 		httpxOptions.CustomHeaders[key] = value
 	}
-	httpxOptions.SniName = options.SniName
-
 	runner.hp, err = httpx.New(&httpxOptions)
 	if err != nil {
 		gologger.Fatal().Msgf("Could not create httpx instance: %s\n", err)
@@ -321,7 +314,6 @@ func New(options *Options) (*Runner, error) {
 	scanopts.Base64ResponseInStdout = options.Base64ResponseInStdout
 	scanopts.ChainInStdout = options.ChainInStdout
 	scanopts.OutputWebSocket = options.OutputWebSocket
-	scanopts.TLSProbe = options.TLSProbe
 	scanopts.CSPProbe = options.CSPProbe
 	if options.RequestURI != "" {
 		scanopts.RequestURI = options.RequestURI
@@ -429,7 +421,7 @@ func New(options *Options) (*Runner, error) {
 		runner.HostErrorsCache = gc
 	}
 
-	runner.simHashes = gcache.New[uint64, struct{}](1000).ARC().Build()
+	runner.dedup = dedup.New(dedup.WithThreshold(uint8(options.SimhashThreshold)))
 	if options.JSONOutput || options.CSVOutput || len(options.OutputFilterPageType) > 0 {
 		ditClassifier, err := dit.New()
 		if err != nil {
@@ -636,24 +628,6 @@ func (r *Runner) seen(k string) bool {
 	return ok
 }
 
-func (r *Runner) duplicate(result *Result) bool {
-	respSimHash := simhash.Simhash(simhash.NewWordFeatureSet(converstionutil.Bytes(result.Raw)))
-	if r.simHashes.Has(respSimHash) {
-		gologger.Debug().Msgf("Skipping duplicate response with simhash %d for URL %s\n", respSimHash, result.URL)
-		return true
-	}
-
-	for simHash := range r.simHashes.GetALL(false) {
-		// lower threshold for increased precision
-		if simhash.Compare(simHash, respSimHash) <= 3 {
-			gologger.Debug().Msgf("Skipping near-duplicate response with simhash %d for URL %s\n", respSimHash, result.URL)
-			return true
-		}
-	}
-	_ = r.simHashes.Set(respSimHash, struct{}{})
-	return false
-}
-
 func (r *Runner) classifyPage(headlessBody, body string, pHash uint64) map[string]any {
 	kb := map[string]any{"pHash": pHash}
 	if r.ditClassifier == nil {
@@ -675,6 +649,9 @@ func (r *Runner) classifyPage(headlessBody, body string, pHash uint64) map[strin
 }
 
 func (r *Runner) testAndSet(k string) bool {
+	r.seenMux.Lock()
+	defer r.seenMux.Unlock()
+
 	// skip empty lines
 	k = strings.TrimSpace(k)
 	if k == "" {
@@ -1112,10 +1089,6 @@ func (r *Runner) RunEnumeration() {
 		}
 
 		for resp := range output {
-			if r.options.SniName != "" {
-				resp.SNI = r.options.SniName
-			}
-
 			if resp.Err != nil {
 				// Change the error message if any port value passed explicitly
 				if url, err := r.parseURL(resp.URL); err == nil && url.Port() != "" {
@@ -1152,7 +1125,8 @@ func (r *Runner) RunEnumeration() {
 				}
 			}
 
-			if r.options.FilterOutDuplicates && r.duplicate(&resp) {
+			if r.options.FilterOutDuplicates && r.dedup.IsDuplicate([]byte(resp.Raw)) {
+				gologger.Debug().Msgf("Skipping near-duplicate response for URL %s\n", resp.URL)
 				continue
 			}
 
@@ -1687,17 +1661,6 @@ func (r *Runner) process(t string, wg *syncutil.AdaptiveWaitGroup, hp *httpx.HTT
 						defer wg.Done()
 						result := r.analyze(hp, protocol, target, method, t, scanopts)
 						output <- result
-						if scanopts.TLSProbe && result.TLSData != nil {
-							for _, tt := range result.TLSData.SubjectAN {
-								if !r.testAndSet(tt) {
-									continue
-								}
-								r.process(tt, wg, hp, protocol, scanopts, output)
-							}
-							if r.testAndSet(result.TLSData.SubjectCN) {
-								r.process(result.TLSData.SubjectCN, wg, hp, protocol, scanopts, output)
-							}
-						}
 						if scanopts.CSPProbe && result.CSPData != nil {
 							scanopts.CSPProbe = false
 							domains := result.CSPData.Domains
@@ -1741,17 +1704,6 @@ func (r *Runner) process(t string, wg *syncutil.AdaptiveWaitGroup, hp *httpx.HTT
 						}
 						result := r.analyze(hp, protocol, target, method, t, scanopts)
 						output <- result
-						if scanopts.TLSProbe && result.TLSData != nil {
-							for _, tt := range result.TLSData.SubjectAN {
-								if !r.testAndSet(tt) {
-									continue
-								}
-								r.process(tt, wg, hp, protocol, scanopts, output)
-							}
-							if r.testAndSet(result.TLSData.SubjectCN) {
-								r.process(result.TLSData.SubjectCN, wg, hp, protocol, scanopts, output)
-							}
-						}
 					}(port, target, method, wantedProtocol)
 				}
 			}
@@ -2391,11 +2343,14 @@ retry:
 				hashHeader = hashes.Sha512([]byte(resp.RawHeaders))
 			case "simhash":
 				hashBody = hashes.Simhash(resp.Data)
-				hashHeader = hashes.Simhash([]byte(resp.RawHeaders))
+				// Header simhash is omitted: volatile headers (Date, Set-Cookie,
+				// X-Request-Id, CF-RAY, etc.) make it unreliable across requests.
 			}
 			if hashBody != "" {
 				hashesMap[fmt.Sprintf("body_%s", hashType)] = hashBody
-				hashesMap[fmt.Sprintf("header_%s", hashType)] = hashHeader
+				if hashHeader != "" {
+					hashesMap[fmt.Sprintf("header_%s", hashType)] = hashHeader
+				}
 				if outputHashes {
 					if !scanopts.OutputWithNoColor {
 						builder.WriteString(aurora.Magenta(hashBody).String())
@@ -2418,17 +2373,6 @@ retry:
 			builder.WriteString(aurora.Magenta(resp.Lines).String())
 		} else {
 			_, _ = fmt.Fprintf(builder, "%d", resp.Lines)
-		}
-		builder.WriteRune(']')
-	}
-	jarmhash := ""
-	if r.options.Jarm {
-		jarmhash = jarm.Jarm(r.hp.Dialer, fullURL, r.options.Timeout)
-		builder.WriteString(" [")
-		if !scanopts.OutputWithNoColor {
-			builder.WriteString(aurora.Magenta(jarmhash).String())
-		} else {
-			_, _ = fmt.Fprintf(builder, "%s", jarmhash)
 		}
 		builder.WriteRune(']')
 	}
@@ -2651,7 +2595,6 @@ retry:
 		ResponseBody:     serverResponseRaw,
 		BodyPreview:      bodyPreview,
 		WebSocket:        isWebSocket,
-		TLSData:          resp.TLSData,
 		CSPData:          resp.CSPData,
 		Pipeline:         pipeline,
 		HTTP2:            http2,
@@ -2673,7 +2616,6 @@ retry:
 		FaviconURL:       faviconURL,
 		Hashes:           hashesMap,
 		Extracts:         extractResult,
-		JarmHash:         jarmhash,
 		Lines:            resp.Lines,
 		Words:            resp.Words,
 		ASN:              asnResponse,

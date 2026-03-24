@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -322,6 +323,67 @@ func TestRunner_CSVRow(t *testing.T) {
 	if strings.Contains(csvOutput, "'200") {
 		t.Error("CSV sanitization incorrectly modified non-vulnerable field")
 	}
+}
+
+func TestRunner_testAndSet(t *testing.T) {
+	r, err := New(&Options{})
+	require.Nil(t, err, "could not create httpx runner")
+
+	t.Run("first insert returns true", func(t *testing.T) {
+		require.True(t, r.testAndSet("example.com"))
+	})
+
+	t.Run("duplicate returns false", func(t *testing.T) {
+		require.False(t, r.testAndSet("example.com"))
+	})
+
+	t.Run("different key returns true", func(t *testing.T) {
+		require.True(t, r.testAndSet("other.com"))
+	})
+
+	t.Run("empty string returns false", func(t *testing.T) {
+		require.False(t, r.testAndSet(""))
+	})
+
+	t.Run("whitespace-only returns false", func(t *testing.T) {
+		require.False(t, r.testAndSet("   "))
+	})
+
+	t.Run("trimmed duplicate returns false", func(t *testing.T) {
+		require.False(t, r.testAndSet("  example.com  "))
+	})
+}
+
+func TestRunner_testAndSet_concurrent(t *testing.T) {
+	r, err := New(&Options{})
+	require.Nil(t, err, "could not create httpx runner")
+
+	const goroutines = 100
+	key := "race-target.com"
+	wins := make([]bool, goroutines)
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	start := make(chan struct{})
+
+	for i := 0; i < goroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			<-start
+			wins[idx] = r.testAndSet(key)
+		}(i)
+	}
+
+	close(start)
+	wg.Wait()
+
+	winCount := 0
+	for _, w := range wins {
+		if w {
+			winCount++
+		}
+	}
+	require.Equal(t, 1, winCount, "exactly one goroutine should win testAndSet for the same key")
 }
 
 func TestCreateNetworkpolicyInstance_AllowDenyFlags(t *testing.T) {
