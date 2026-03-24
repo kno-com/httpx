@@ -1138,6 +1138,7 @@ func (r *Runner) RunEnumeration() {
 			}
 
 			if r.options.FilterOutDuplicates && r.dedup.IsDuplicate([]byte(resp.Raw)) {
+				gologger.Debug().Msgf("Skipping near-duplicate response for URL %s\n", resp.URL)
 				continue
 			}
 
