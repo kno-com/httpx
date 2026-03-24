@@ -21,9 +21,15 @@ func TestNew_Defaults(t *testing.T) {
 }
 
 func TestNew_WithOptions(t *testing.T) {
-	d := New(WithThreshold(5), WithStripDynamic(false))
-	assert.Equal(t, uint8(5), d.threshold)
+	d := New(WithThreshold(2), WithStripDynamic(false))
+	assert.Equal(t, uint8(2), d.threshold)
 	assert.False(t, d.stripDynamic)
+}
+
+func TestNew_ThresholdCapped(t *testing.T) {
+	d := New(WithThreshold(10))
+	assert.Equal(t, maxGuaranteedThreshold, d.threshold,
+		"threshold should be capped at maxGuaranteedThreshold")
 }
 
 func TestHammingDistance(t *testing.T) {
@@ -76,11 +82,13 @@ func TestIsDuplicate_CustomThreshold(t *testing.T) {
 		distance  uint8
 		wantDup   bool
 	}{
-		{name: "within threshold", threshold: 5, distance: 4, wantDup: true},
-		{name: "at threshold", threshold: 5, distance: 5, wantDup: true},
-		{name: "beyond threshold", threshold: 5, distance: 6, wantDup: false},
+		{name: "within threshold", threshold: 3, distance: 2, wantDup: true},
+		{name: "at threshold", threshold: 3, distance: 3, wantDup: true},
+		{name: "beyond threshold", threshold: 3, distance: 4, wantDup: false},
 		{name: "zero threshold exact", threshold: 0, distance: 0, wantDup: true},
 		{name: "zero threshold one bit", threshold: 0, distance: 1, wantDup: false},
+		{name: "threshold 1 at 1", threshold: 1, distance: 1, wantDup: true},
+		{name: "threshold 1 at 2", threshold: 1, distance: 2, wantDup: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -91,10 +99,9 @@ func TestIsDuplicate_CustomThreshold(t *testing.T) {
 			d.idx.add(baseFP)
 
 			// Build a fingerprint at exactly tt.distance bits away.
-			candidateFP := flipBits(baseFP, tt.distance)
-			// Sanity-check our helper.
+			candidateFP := flipBitsAt(baseFP, tt.distance)
 			require.Equal(t, tt.distance, uint8(bits.OnesCount64(baseFP^candidateFP)),
-				"flipBits should produce exactly the requested distance")
+				"flipBitsAt should produce exactly the requested distance")
 
 			// Override extractor to return our controlled fingerprint.
 			d.featureHasher = func([]byte) uint64 { return candidateFP }
@@ -103,6 +110,23 @@ func TestIsDuplicate_CustomThreshold(t *testing.T) {
 			assert.Equal(t, tt.wantDup, got)
 		})
 	}
+}
+
+func TestIsDuplicate_CrossBandNearDuplicate(t *testing.T) {
+	// Flip bits across different bands to exercise the pigeonhole guarantee:
+	// 3 bits spread across 3 bands must still be caught at threshold 3.
+	d := New(WithThreshold(3))
+
+	baseFP := uint64(0xDEADBEEFCAFEBABE)
+	d.idx.add(baseFP)
+
+	// Flip bit 0 (band 0), bit 20 (band 1), bit 40 (band 2) — 3 bands touched.
+	crossBandFP := baseFP ^ (1 << 0) ^ (1 << 20) ^ (1 << 40)
+	require.Equal(t, uint8(3), uint8(bits.OnesCount64(baseFP^crossBandFP)))
+
+	d.featureHasher = func([]byte) uint64 { return crossBandFP }
+	assert.True(t, d.IsDuplicate([]byte("anything")),
+		"3 bits across 3 bands should still be detected at threshold 3")
 }
 
 func TestIsDuplicate_ConcurrentSafety(t *testing.T) {
@@ -155,10 +179,12 @@ func TestIsDuplicate_TOCTOU(t *testing.T) {
 	assert.Equal(t, 1, trueCount, "exactly one goroutine should see a duplicate")
 }
 
-// flipBits returns v with exactly n of the lowest bits flipped.
-func flipBits(v uint64, n uint8) uint64 {
+// flipBitsAt returns v with exactly n bits flipped, spread across bands.
+// Bit positions: 0, 16, 32, 48, 1, 17, ... to ensure cross-band coverage.
+func flipBitsAt(v uint64, n uint8) uint64 {
+	positions := [...]int{0, 16, 32, 48, 1, 17, 33, 49, 2, 18, 34, 50}
 	for i := range n {
-		v ^= 1 << i
+		v ^= 1 << positions[i]
 	}
 	return v
 }

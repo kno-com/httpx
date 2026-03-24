@@ -51,7 +51,9 @@ type Deduplicator struct {
 }
 
 // New creates a Deduplicator with the given options. Zero-value defaults are:
-// threshold=3, stripDynamic=true.
+// threshold=3, stripDynamic=true. Threshold is capped at maxGuaranteedThreshold
+// (3) because the band-partitioned index cannot guarantee correctness beyond
+// that value.
 func New(opts ...Option) *Deduplicator {
 	d := &Deduplicator{
 		idx:          newBandIndex(),
@@ -62,6 +64,9 @@ func New(opts ...Option) *Deduplicator {
 	}
 	for _, o := range opts {
 		o(d)
+	}
+	if d.threshold > maxGuaranteedThreshold {
+		d.threshold = maxGuaranteedThreshold
 	}
 	// Wire featureHasher to use the content-type-aware extractor system.
 	// Capture contentType once so the closure does not hold a pointer to d.

@@ -5,11 +5,21 @@ import (
 	"sync"
 )
 
+const numBands = 4
+
+// maxGuaranteedThreshold is the highest Hamming distance at which the
+// pigeonhole principle guarantees that at least one 16-bit band matches.
+// For 4 bands: threshold <= numBands - 1 = 3.
+const maxGuaranteedThreshold uint8 = numBands - 1
+
 // bandIndex is a band-partitioned index for near-duplicate detection using
 // 64-bit simhash fingerprints. It splits each hash into 4 x 16-bit bands and
 // maintains a lookup table per band. By the pigeonhole principle, if two
 // hashes differ in <= 3 bits, at least one 16-bit band must be identical,
 // guaranteeing O(1) amortized candidate lookup instead of O(n) linear scan.
+//
+// WARNING: for threshold > 3, the pigeonhole guarantee does not hold and
+// near-duplicates may be silently missed.
 type bandIndex struct {
 	// mu guards all mutable fields below.
 	mu    sync.RWMutex
@@ -50,28 +60,7 @@ func (idx *bandIndex) add(hash uint64) {
 func (idx *bandIndex) hasNearDuplicate(hash uint64, threshold uint8) bool {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-
-	// Fast path: exact match.
-	if _, ok := idx.full[hash]; ok {
-		return true
-	}
-
-	// Collect candidates from all four band tables. Use a set to avoid
-	// computing Hamming distance on the same candidate twice.
-	seen := make(map[uint64]struct{})
-	for i := range idx.bands {
-		band := extractBand(hash, i)
-		for _, candidate := range idx.bands[i][band] {
-			if _, already := seen[candidate]; already {
-				continue
-			}
-			seen[candidate] = struct{}{}
-			if hammingDistance(candidate, hash) <= threshold {
-				return true
-			}
-		}
-	}
-	return false
+	return idx.findDup(hash, threshold)
 }
 
 // addIfAbsent atomically checks for a near duplicate and, if none is found,
@@ -82,12 +71,29 @@ func (idx *bandIndex) addIfAbsent(hash uint64, threshold uint8) bool {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
-	// Exact match fast path.
+	if idx.findDup(hash, threshold) {
+		return true
+	}
+
+	// No near duplicate found — insert.
+	idx.full[hash] = struct{}{}
+	for i := range idx.bands {
+		band := extractBand(hash, i)
+		idx.bands[i][band] = append(idx.bands[i][band], hash)
+	}
+	return false
+}
+
+// findDup checks whether hash has an exact or near-duplicate in the index.
+// The caller must hold at least a read lock on idx.mu.
+func (idx *bandIndex) findDup(hash uint64, threshold uint8) bool {
+	// Fast path: exact match.
 	if _, ok := idx.full[hash]; ok {
 		return true
 	}
 
-	// Check candidates from band tables.
+	// Collect candidates from band tables. Use a set to avoid computing
+	// Hamming distance on the same candidate twice.
 	seen := make(map[uint64]struct{})
 	for i := range idx.bands {
 		band := extractBand(hash, i)
@@ -100,13 +106,6 @@ func (idx *bandIndex) addIfAbsent(hash uint64, threshold uint8) bool {
 				return true
 			}
 		}
-	}
-
-	// No near duplicate found — insert.
-	idx.full[hash] = struct{}{}
-	for i := range idx.bands {
-		band := extractBand(hash, i)
-		idx.bands[i][band] = append(idx.bands[i][band], hash)
 	}
 	return false
 }

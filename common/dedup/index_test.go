@@ -90,9 +90,9 @@ func TestBandIndex_NearDuplicate_WithinThreshold(t *testing.T) {
 			idx := newBandIndex()
 			idx.add(tt.base)
 
-			candidate := flipBits(tt.base, tt.distance)
+			candidate := flipBitsAt(tt.base, tt.distance)
 			require.Equal(t, tt.distance, uint8(bits.OnesCount64(tt.base^candidate)),
-				"flipBits sanity check")
+				"flipBitsAt sanity check")
 
 			got := idx.hasNearDuplicate(candidate, tt.threshold)
 			assert.Equal(t, tt.wantMatch, got)
@@ -131,9 +131,9 @@ func TestBandIndex_BeyondThreshold_NotMatched(t *testing.T) {
 			idx := newBandIndex()
 			idx.add(tt.base)
 
-			candidate := flipBits(tt.base, tt.distance)
+			candidate := flipBitsAt(tt.base, tt.distance)
 			require.Equal(t, tt.distance, uint8(bits.OnesCount64(tt.base^candidate)),
-				"flipBits sanity check")
+				"flipBitsAt sanity check")
 
 			got := idx.hasNearDuplicate(candidate, tt.threshold)
 			assert.False(t, got,
@@ -146,7 +146,7 @@ func TestBandIndex_BeyondThreshold_NotMatched(t *testing.T) {
 func TestBandIndex_DifferentThresholds(t *testing.T) {
 	base := uint64(0xDEADBEEFCAFEBABE)
 	// Create a candidate exactly 3 bits away.
-	candidate := flipBits(base, 3)
+	candidate := flipBitsAt(base, 3)
 
 	tests := []struct {
 		name      string
@@ -186,13 +186,13 @@ func TestBandIndex_AddIfAbsent(t *testing.T) {
 	assert.Equal(t, 1, idx.size(), "duplicate should not increase size")
 
 	// Near-duplicate within threshold: duplicate.
-	near := flipBits(h, 2)
+	near := flipBitsAt(h, 2)
 	dup = idx.addIfAbsent(near, 3)
 	assert.True(t, dup, "near-duplicate within threshold should be duplicate")
 	assert.Equal(t, 1, idx.size(), "near-duplicate should not increase size")
 
 	// Beyond threshold: not duplicate.
-	far := flipBits(h, 10)
+	far := flipBitsAt(h, 10)
 	dup = idx.addIfAbsent(far, 3)
 	assert.False(t, dup, "beyond-threshold should not be duplicate")
 	assert.Equal(t, 2, idx.size(), "novel hash should increase size")
