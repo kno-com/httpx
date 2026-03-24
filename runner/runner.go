@@ -2382,7 +2382,9 @@ retry:
 			}
 			if hashBody != "" {
 				hashesMap[fmt.Sprintf("body_%s", hashType)] = hashBody
-				hashesMap[fmt.Sprintf("header_%s", hashType)] = hashHeader
+				if hashHeader != "" {
+					hashesMap[fmt.Sprintf("header_%s", hashType)] = hashHeader
+				}
 				if outputHashes {
 					if !scanopts.OutputWithNoColor {
 						builder.WriteString(aurora.Magenta(hashBody).String())
