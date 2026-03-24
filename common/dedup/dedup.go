@@ -21,16 +21,15 @@ func WithThreshold(n uint8) Option {
 }
 
 // WithStripDynamic controls whether dynamic content (e.g. timestamps, CSRF
-// tokens) is stripped before hashing. The default is true. This is a no-op
-// placeholder that will be replaced in a future task.
+// tokens) is stripped before hashing. The default is true.
 func WithStripDynamic(enabled bool) Option {
 	return func(d *Deduplicator) {
 		d.stripDynamic = enabled
 	}
 }
 
-// WithContentType sets a content-type hint used by selectExtractor to choose
-// the best feature extraction strategy for the data being deduplicated.
+// WithContentType sets a content-type hint used to choose the best feature
+// extraction strategy for the data being deduplicated.
 func WithContentType(ct string) Option {
 	return func(d *Deduplicator) {
 		d.contentType = ct
@@ -41,11 +40,9 @@ func WithContentType(ct string) Option {
 // fingerprints. It is safe for concurrent use.
 type Deduplicator struct {
 	// Immutable after construction.
-	threshold      uint8
-	stripDynamic   bool
-	contentType    string
-	preprocessor   func([]byte) []byte
-	featureHasher  func([]byte) uint64
+	threshold    uint8
+	stripDynamic bool
+	contentType  string
 
 	idx *bandIndex
 }
@@ -59,24 +56,12 @@ func New(opts ...Option) *Deduplicator {
 		idx:          newBandIndex(),
 		threshold:    defaultThreshold,
 		stripDynamic: true,
-		// Default no-op preprocessor, replaced below when stripDynamic is true.
-		preprocessor: func(b []byte) []byte { return b },
 	}
 	for _, o := range opts {
 		o(d)
 	}
 	if d.threshold > maxGuaranteedThreshold {
 		d.threshold = maxGuaranteedThreshold
-	}
-	// Replace the no-op preprocessor with dynamic-content stripping when enabled.
-	if d.stripDynamic {
-		d.preprocessor = stripDynamicTokens
-	}
-	// Wire featureHasher to use the content-type-aware extractor system.
-	// Capture contentType once so the closure does not hold a pointer to d.
-	ct := d.contentType
-	d.featureHasher = func(b []byte) uint64 {
-		return selectExtractor(ct, b).extract(b)
 	}
 	return d
 }
@@ -85,8 +70,11 @@ func New(opts ...Option) *Deduplicator {
 // document. If raw is novel it is recorded and future near-duplicates will
 // match against it.
 func (d *Deduplicator) IsDuplicate(raw []byte) bool {
-	data := d.preprocessor(raw)
-	fp := d.featureHasher(data)
+	data := raw
+	if d.stripDynamic {
+		data = stripDynamicTokens(data)
+	}
+	fp := fingerprint(d.contentType, data)
 
 	// Fast read-only check.
 	if d.idx.hasNearDuplicate(fp, d.threshold) {

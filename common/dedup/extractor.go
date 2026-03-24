@@ -9,12 +9,6 @@ import (
 	"github.com/mfonda/simhash"
 )
 
-// featureExtractor computes a simhash fingerprint from raw bytes.
-// Each implementation uses a different strategy suited to the content type.
-type featureExtractor interface {
-	extract(data []byte) uint64
-}
-
 // WordBoundary splits on word boundaries (same pattern as mfonda/simhash).
 // Exported so that common/hashes can share the same tokenizer.
 var WordBoundary = regexp.MustCompile(`[\w']+(?:\://[\w\./]+){0,1}`)
@@ -22,14 +16,36 @@ var WordBoundary = regexp.MustCompile(`[\w']+(?:\://[\w\./]+){0,1}`)
 // jsonKeyRe matches JSON object keys (double-quoted strings followed by colon).
 var jsonKeyRe = regexp.MustCompile(`"([^"\\]*(?:\\.[^"\\]*)*)"[ \t\n\r]*:`)
 
-// ---------- shingleExtractor ----------
+// fingerprint computes a simhash fingerprint for data, choosing the best
+// extraction strategy based on contentType and the data itself.
+func fingerprint(contentType string, data []byte) uint64 {
+	ct := strings.ToLower(contentType)
 
-// shingleExtractor splits on word boundaries, applies w=3 shingling,
-// hashes each shingle, and returns a simhash fingerprint.
-type shingleExtractor struct{}
+	switch {
+	case strings.Contains(ct, "json"):
+		return extractJSONKeys(data)
 
-func (shingleExtractor) extract(data []byte) uint64 {
-	words := WordBoundary.FindAll(bytes.ToLower(data), -1)
+	case strings.Contains(ct, "javascript"),
+		strings.Contains(ct, "css"):
+		return extractByteWindows(data)
+
+	default:
+		// For text/html or unknown types, compute words once. This avoids
+		// running the word-boundary regex twice (once in isMinified, once
+		// in extractShingles).
+		lower := bytes.ToLower(data)
+		words := WordBoundary.FindAll(lower, -1)
+
+		if isMinifiedFromWords(data, words) {
+			return extractByteWindows(data)
+		}
+		return extractShinglesFromWords(words)
+	}
+}
+
+// extractShinglesFromWords computes a simhash from pre-tokenized words using
+// w=3 shingling.
+func extractShinglesFromWords(words [][]byte) uint64 {
 	if len(words) == 0 {
 		return 0
 	}
@@ -37,18 +53,18 @@ func (shingleExtractor) extract(data []byte) uint64 {
 	return simhash.SimhashBytes(shingles)
 }
 
-// ---------- byteWindowExtractor ----------
+// extractShingles splits data on word boundaries, applies w=3 shingling,
+// and returns a simhash fingerprint.
+func extractShingles(data []byte) uint64 {
+	words := WordBoundary.FindAll(bytes.ToLower(data), -1)
+	return extractShinglesFromWords(words)
+}
 
-// byteWindowExtractor uses an 8-byte sliding window over raw bytes.
-// It is intended for minified JS/CSS where word boundaries are scarce.
-type byteWindowExtractor struct{}
-
-const byteWindowSize = 8
-
-func (byteWindowExtractor) extract(data []byte) uint64 {
+// extractByteWindows uses an 8-byte sliding window over raw bytes. Suited
+// for minified JS/CSS where word boundaries are scarce.
+func extractByteWindows(data []byte) uint64 {
 	lower := bytes.ToLower(data)
 	if len(lower) < byteWindowSize {
-		// Too short for a window; hash the whole thing as one feature.
 		h := fnv.New64()
 		h.Write(lower)
 		return h.Sum64()
@@ -61,17 +77,14 @@ func (byteWindowExtractor) extract(data []byte) uint64 {
 	return simhash.SimhashBytes(windows)
 }
 
-// ---------- jsonKeyExtractor ----------
+const byteWindowSize = 8
 
-// jsonKeyExtractor extracts JSON key paths only (ignoring values),
-// shingles the key sequence, and returns a simhash fingerprint.
-type jsonKeyExtractor struct{}
-
-func (jsonKeyExtractor) extract(data []byte) uint64 {
+// extractJSONKeys extracts JSON key paths only (ignoring values), shingles
+// the key sequence, and returns a simhash fingerprint.
+func extractJSONKeys(data []byte) uint64 {
 	matches := jsonKeyRe.FindAllSubmatch(data, -1)
 	if len(matches) == 0 {
-		// Fallback: treat as plain text.
-		return shingleExtractor{}.extract(data)
+		return extractShingles(data)
 	}
 	keys := make([][]byte, len(matches))
 	for i, m := range matches {
@@ -81,41 +94,22 @@ func (jsonKeyExtractor) extract(data []byte) uint64 {
 	return simhash.SimhashBytes(shingles)
 }
 
-// ---------- selectExtractor ----------
-
-// selectExtractor returns the most appropriate featureExtractor for the given
-// content-type and data. When content-type is empty or unknown it falls back
-// to shingleExtractor.
-func selectExtractor(contentType string, data []byte) featureExtractor {
-	ct := strings.ToLower(contentType)
-
-	switch {
-	case strings.Contains(ct, "json"):
-		return jsonKeyExtractor{}
-
-	case strings.Contains(ct, "javascript"),
-		strings.Contains(ct, "css"):
-		// Always use byte-window for JS/CSS content types.
-		return byteWindowExtractor{}
-
-	default:
-		// For text/html or unknown types, check whether the content looks
-		// minified: word count abnormally low relative to byte length.
-		if isMinified(data) {
-			return byteWindowExtractor{}
-		}
-		return shingleExtractor{}
-	}
-}
-
 // isMinified reports whether data appears to be minified content:
 // fewer than 0.05 words per byte and content > 512 bytes.
 func isMinified(data []byte) bool {
+	words := WordBoundary.FindAll(data, -1)
+	return isMinifiedFromWords(data, words)
+}
+
+// isMinifiedFromWords is the inner check, accepting pre-computed words to
+// avoid running the word-boundary regex twice on the hot path.
+func isMinifiedFromWords(data []byte, words [][]byte) bool {
 	if len(data) <= 512 {
 		return false
 	}
-	wordCount := len(WordBoundary.FindAll(data, -1))
-	ratio := float64(wordCount) / float64(len(data))
+	if len(words) == 0 {
+		return true
+	}
+	ratio := float64(len(words)) / float64(len(data))
 	return ratio < 0.05
 }
-

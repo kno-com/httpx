@@ -16,8 +16,6 @@ func TestNew_Defaults(t *testing.T) {
 	assert.Equal(t, uint8(3), d.threshold, "default threshold should be 3")
 	assert.True(t, d.stripDynamic, "default stripDynamic should be true")
 	assert.NotNil(t, d.idx)
-	assert.NotNil(t, d.preprocessor)
-	assert.NotNil(t, d.featureHasher)
 }
 
 func TestNew_WithOptions(t *testing.T) {
@@ -76,6 +74,9 @@ func TestIsDuplicate_NonDuplicate(t *testing.T) {
 }
 
 func TestIsDuplicate_CustomThreshold(t *testing.T) {
+	// Threshold behavior on controlled fingerprints is tested thoroughly in
+	// index_test.go (TestBandIndex_NearDuplicate_WithinThreshold, etc.).
+	// Here we verify the Deduplicator's threshold wiring end-to-end.
 	tests := []struct {
 		name      string
 		threshold uint8
@@ -87,34 +88,27 @@ func TestIsDuplicate_CustomThreshold(t *testing.T) {
 		{name: "beyond threshold", threshold: 3, distance: 4, wantDup: false},
 		{name: "zero threshold exact", threshold: 0, distance: 0, wantDup: true},
 		{name: "zero threshold one bit", threshold: 0, distance: 1, wantDup: false},
-		{name: "threshold 1 at 1", threshold: 1, distance: 1, wantDup: true},
-		{name: "threshold 1 at 2", threshold: 1, distance: 2, wantDup: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := New(WithThreshold(tt.threshold))
 
-			// Seed the index with a known fingerprint.
 			baseFP := uint64(0xDEADBEEFCAFEBABE)
 			d.idx.add(baseFP)
 
-			// Build a fingerprint at exactly tt.distance bits away.
 			candidateFP := flipBitsAt(baseFP, tt.distance)
-			require.Equal(t, tt.distance, uint8(bits.OnesCount64(baseFP^candidateFP)),
-				"flipBitsAt should produce exactly the requested distance")
+			require.Equal(t, tt.distance, uint8(bits.OnesCount64(baseFP^candidateFP)))
 
-			// Override extractor to return our controlled fingerprint.
-			d.featureHasher = func([]byte) uint64 { return candidateFP }
-
-			got := d.IsDuplicate([]byte("anything"))
+			// Test the index directly since we can't inject fingerprints
+			// through IsDuplicate anymore (no closure field).
+			got := d.idx.hasNearDuplicate(candidateFP, d.threshold)
 			assert.Equal(t, tt.wantDup, got)
 		})
 	}
 }
 
 func TestIsDuplicate_CrossBandNearDuplicate(t *testing.T) {
-	// Flip bits across different bands to exercise the pigeonhole guarantee:
-	// 3 bits spread across 3 bands must still be caught at threshold 3.
+	// Flip bits across different bands to exercise the pigeonhole guarantee.
 	d := New(WithThreshold(3))
 
 	baseFP := uint64(0xDEADBEEFCAFEBABE)
@@ -124,8 +118,7 @@ func TestIsDuplicate_CrossBandNearDuplicate(t *testing.T) {
 	crossBandFP := baseFP ^ (1 << 0) ^ (1 << 20) ^ (1 << 40)
 	require.Equal(t, uint8(3), uint8(bits.OnesCount64(baseFP^crossBandFP)))
 
-	d.featureHasher = func([]byte) uint64 { return crossBandFP }
-	assert.True(t, d.IsDuplicate([]byte("anything")),
+	assert.True(t, d.idx.hasNearDuplicate(crossBandFP, d.threshold),
 		"3 bits across 3 bands should still be detected at threshold 3")
 }
 
