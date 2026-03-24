@@ -36,9 +36,11 @@
  - Simple and modular code base making it easy to contribute.
  - Fast And fully configurable flags to probe multiple elements.
  - Supports multiple HTTP based probings.
- - Smart auto fallback from https to http as default. 
+ - Smart auto fallback from https to http as default.
  - Supports hosts, URLs and CIDR as input.
  - Handles edge cases doing retries, backoffs etc for handling WAFs.
+ - Chrome TLS fingerprint (uTLS) on every request — no configuration needed.
+ - Near-duplicate response filtering with simhash and band-partitioned indexing.
 
 ### Supported probes
 
@@ -48,7 +50,7 @@
 | Title           | true          | CNAME          | true          |
 | Status Code     | true          | Raw HTTP       | false         |
 | Content Length  | true          | HTTP2          | false         |
-| TLS Certificate | true          | HTTP Pipeline  | false         |
+| HTTP Pipeline  | false         |
 | CSP Header      | true          | Virtual host   | false         |
 | Line Count      | true          | Word Count     | true          |
 | Location Header | true          | CDN            | false         |
@@ -58,7 +60,7 @@
 | Favicon Hash    | false         | Probe  Status  | false         |
 | Body Hash       | true          | Header  Hash   | true          |
 | Redirect chain  | false         | URL Scheme     | true          |
-| JARM Hash       | false         | ASN            | false         |
+| ASN            | false         |
 
 # Installation Instructions
 
@@ -104,7 +106,6 @@ PROBES:
    -location                              display response redirect location
    -favicon                               display mmh3 hash for '/favicon.ico' file
    -hash string                           display response body hash (supported: md5,mmh3,simhash,sha1,sha256,sha512)
-   -jarm                                  display jarm fingerprint hash
    -rt, -response-time                    display response time
    -lc, -line-count                       display response body line count
    -wc, -word-count                       display response body word count
@@ -154,6 +155,7 @@ FILTERS:
    -fpt, -filter-page-type string[]       filter response with specified page type (e.g. -fpt login,captcha,parked)
    -fep, -filter-error-page               [DEPRECATED: use -fpt] filter response with ML based error page detection
    -fd, -filter-duplicates                filter out near-duplicate responses (only first response is retained)
+   -simhash-threshold int                 simhash near-duplicate threshold (0-3) (default 3)
    -fl, -filter-length string             filter response with specified content length (-fl 23,33)
    -flc, -filter-line-count string        filter response body with specified line count (-flc 423,532)
    -fwc, -filter-word-count string        filter response body with specified word count (-fwc 423,532)
@@ -176,9 +178,7 @@ MISCELLANEOUS:
    -pa, -probe-all-ips        probe all the ips associated with same host
    -p, -ports string[]        ports to probe (nmap syntax: eg http:1,2-10,11,https:80)
    -path string               path or list of paths to probe (comma-separated, file)
-   -tls-probe                 send http probes on the extracted TLS domains (dns_name)
    -csp-probe                 send http probes on the extracted CSP domains
-   -tls-grab                  perform TLS(SSL) data grabbing
    -pipeline                  probe and display server supporting HTTP1.1 pipeline
    -http2                     probe and display server supporting HTTP2
    -vhost                     probe and display server supporting VHOST
@@ -219,7 +219,6 @@ CONFIGURATIONS:
    -r, -resolvers string[]          list of custom resolver (file or comma separated)
    -allow string[]                  allowed list of IP/CIDR's to process (file or comma separated)
    -deny string[]                   denied list of IP/CIDR's to process (file or comma separated)
-   -sni, -sni-name string           custom TLS SNI name
    -random-agent                    enable Random User-Agent to use (default true)
    -auto-referer                    set the Referer header to the current URL
    -H, -header string[]             custom http headers to send with request
@@ -236,9 +235,7 @@ CONFIGURATIONS:
    -s, -stream                      stream mode - start elaborating input targets without sorting
    -sd, -skip-dedupe                disable dedupe input items (only used with stream mode)
    -ldp, -leave-default-ports       leave default http/https ports in host header (eg. http://host:80 - https://host:443
-   -ztls                            use ztls library with autofallback to standard one for tls13
    -no-decode                       avoid decoding body
-   -tlsi, -tls-impersonate          enable experimental client hello (ja3) tls randomization
    -no-stdin                        Disable Stdin processing
    -hae, -http-api-endpoint string  experimental http api endpoint
    -sf, -secret-file string         path to secret file for authentication
