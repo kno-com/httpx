@@ -30,10 +30,10 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/corona10/goimagehash"
 	"github.com/gocarina/gocsv"
-	"github.com/mfonda/simhash"
 	asnmap "github.com/projectdiscovery/asnmap/libs"
 	"github.com/projectdiscovery/fastdialer/fastdialer"
 	"github.com/projectdiscovery/httpx/common/customextract"
+	"github.com/projectdiscovery/httpx/common/dedup"
 	"github.com/projectdiscovery/httpx/common/hashes/jarm"
 	"github.com/projectdiscovery/httpx/common/inputformats"
 	"github.com/happyhackingspace/dit"
@@ -69,7 +69,6 @@ import (
 	"github.com/projectdiscovery/httpx/common/stringz"
 	"github.com/projectdiscovery/mapcidr"
 	"github.com/projectdiscovery/rawhttp"
-	converstionutil "github.com/projectdiscovery/utils/conversion"
 	errkit "github.com/projectdiscovery/utils/errkit"
 	fileutil "github.com/projectdiscovery/utils/file"
 	pdhttputil "github.com/projectdiscovery/utils/http"
@@ -95,7 +94,7 @@ type Runner struct {
 	browser            *Browser
 	ditClassifier *dit.Classifier
 	pHashClusters      []pHashCluster
-	simHashes          gcache.Cache[uint64, struct{}] // Include simHashes for efficient duplicate detection
+	dedup              *dedup.Deduplicator
 	httpApiEndpoint    *Server
 	authProvider       authprovider.AuthProvider
 	interruptCh        chan struct{}
@@ -430,7 +429,7 @@ func New(options *Options) (*Runner, error) {
 		runner.HostErrorsCache = gc
 	}
 
-	runner.simHashes = gcache.New[uint64, struct{}](1000).ARC().Build()
+	runner.dedup = dedup.New(dedup.WithThreshold(uint8(options.SimhashThreshold)))
 	if options.JSONOutput || options.CSVOutput || len(options.OutputFilterPageType) > 0 {
 		ditClassifier, err := dit.New()
 		if err != nil {
@@ -635,24 +634,6 @@ func (r *Runner) setSeen(k string) {
 func (r *Runner) seen(k string) bool {
 	_, ok := r.hm.Get(k)
 	return ok
-}
-
-func (r *Runner) duplicate(result *Result) bool {
-	respSimHash := simhash.Simhash(simhash.NewWordFeatureSet(converstionutil.Bytes(result.Raw)))
-	if r.simHashes.Has(respSimHash) {
-		gologger.Debug().Msgf("Skipping duplicate response with simhash %d for URL %s\n", respSimHash, result.URL)
-		return true
-	}
-
-	for simHash := range r.simHashes.GetALL(false) {
-		// lower threshold for increased precision
-		if simhash.Compare(simHash, respSimHash) <= 3 {
-			gologger.Debug().Msgf("Skipping near-duplicate response with simhash %d for URL %s\n", respSimHash, result.URL)
-			return true
-		}
-	}
-	_ = r.simHashes.Set(respSimHash, struct{}{})
-	return false
 }
 
 func (r *Runner) classifyPage(headlessBody, body string, pHash uint64) map[string]any {
@@ -1156,7 +1137,8 @@ func (r *Runner) RunEnumeration() {
 				}
 			}
 
-			if r.options.FilterOutDuplicates && r.duplicate(&resp) {
+			if r.options.FilterOutDuplicates && r.dedup.IsDuplicate([]byte(resp.Raw)) {
+				gologger.Debug().Msgf("Skipping near-duplicate response for URL %s\n", resp.URL)
 				continue
 			}
 
@@ -2395,11 +2377,14 @@ retry:
 				hashHeader = hashes.Sha512([]byte(resp.RawHeaders))
 			case "simhash":
 				hashBody = hashes.Simhash(resp.Data)
-				hashHeader = hashes.Simhash([]byte(resp.RawHeaders))
+				// Header simhash is omitted: volatile headers (Date, Set-Cookie,
+				// X-Request-Id, CF-RAY, etc.) make it unreliable across requests.
 			}
 			if hashBody != "" {
 				hashesMap[fmt.Sprintf("body_%s", hashType)] = hashBody
-				hashesMap[fmt.Sprintf("header_%s", hashType)] = hashHeader
+				if hashHeader != "" {
+					hashesMap[fmt.Sprintf("header_%s", hashType)] = hashHeader
+				}
 				if outputHashes {
 					if !scanopts.OutputWithNoColor {
 						builder.WriteString(aurora.Magenta(hashBody).String())

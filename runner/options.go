@@ -311,6 +311,7 @@ type Options struct {
 	OutputFilterWordsCount    string
 	filterWordsCount          []int
 	Hashes                    string
+	SimhashThreshold          int
 	Jarm                      bool
 	Asn                       bool
 	OutputMatchCdn            goflags.StringSlice
@@ -401,6 +402,7 @@ func ParseOptions() *Options {
 		flagSet.BoolVar(&options.Location, "location", false, "display response redirect location"),
 		flagSet.BoolVar(&options.Favicon, "favicon", false, "display mmh3 hash for '/favicon.ico' file"),
 		flagSet.StringVar(&options.Hashes, "hash", "", "display response body hash (supported: md5,mmh3,simhash,sha1,sha256,sha512)"),
+		flagSet.IntVar(&options.SimhashThreshold, "simhash-threshold", 3, "simhash near-duplicate threshold (0-3)"),
 		flagSet.BoolVar(&options.Jarm, "jarm", false, "display jarm fingerprint hash"),
 		flagSet.BoolVarP(&options.OutputResponseTime, "response-time", "rt", false, "display response time"),
 		flagSet.BoolVarP(&options.OutputLinesCount, "line-count", "lc", false, "display response body line count"),
@@ -826,6 +828,9 @@ func (options *Options) ValidateOptions() error {
 				gologger.Error().Msgf("Unsupported hash type: %s\n", hashType)
 			}
 		}
+	}
+	if options.SimhashThreshold < 0 || options.SimhashThreshold > 3 {
+		return fmt.Errorf("invalid simhash threshold %d: must be between 0 and 3", options.SimhashThreshold)
 	}
 	if len(options.OutputMatchCdn) > 0 || len(options.OutputFilterCdn) > 0 {
 		options.OutputCDN = "true"

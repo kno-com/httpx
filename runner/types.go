@@ -136,7 +136,7 @@ func dslVariables() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	vars := []string{"header_md5", "header_mmh3", "header_sha256", "header_simhash", "body_md5", "body_mmh3", "body_sha256", "body_simhash"}
+	vars := []string{"header_md5", "header_mmh3", "header_sha256", "body_md5", "body_mmh3", "body_sha256", "body_simhash"}
 	mapsutil.Walk(m, func(k string, v any) {
 		vars = append(vars, k)
 	})
