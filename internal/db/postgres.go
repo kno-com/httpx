@@ -99,7 +99,6 @@ func (p *postgresDatabase) EnsureSchema(ctx context.Context) error {
 			favicon_md5 TEXT,
 			favicon_path TEXT,
 			favicon_url TEXT,
-			jarm_hash TEXT,
 
 			-- CDN info
 			cdn BOOLEAN,
@@ -108,9 +107,6 @@ func (p *postgresDatabase) EnsureSchema(ctx context.Context) error {
 
 			-- ASN info
 			asn JSONB,
-
-			-- TLS data
-			tls JSONB,
 
 			-- CSP data
 			csp JSONB,
@@ -195,8 +191,8 @@ func (p *postgresDatabase) InsertBatch(ctx context.Context, results []runner.Res
 			status_code, content_length, content_type, title, webserver, response_time,
 			location, body, body_preview, raw_header, request,
 			host_ip, a, aaaa, cname, resolvers, body_fqdn, body_domains, sni,
-			tech, hash, favicon, favicon_md5, favicon_path, favicon_url, jarm_hash,
-			cdn, cdn_name, cdn_type, asn, tls, csp,
+			tech, hash, favicon, favicon_md5, favicon_path, favicon_url,
+			cdn, cdn_name, cdn_type, asn, csp,
 			failed, error, websocket, http2, pipeline, vhost,
 			words, lines, header, extracts, extract_regex,
 			chain, chain_status_codes,
@@ -207,13 +203,13 @@ func (p *postgresDatabase) InsertBatch(ctx context.Context, results []runner.Res
 			$10, $11, $12, $13, $14, $15,
 			$16, $17, $18, $19, $20,
 			$21, $22, $23, $24, $25, $26, $27, $28,
-			$29, $30, $31, $32, $33, $34, $35,
-			$36, $37, $38, $39, $40, $41,
-			$42, $43, $44, $45, $46, $47,
-			$48, $49, $50, $51, $52,
-			$53, $54,
-			$55, $56, $57, $58, $59,
-			$60, $61, $62
+			$29, $30, $31, $32, $33, $34,
+			$35, $36, $37, $38, $39,
+			$40, $41, $42, $43, $44, $45,
+			$46, $47, $48, $49, $50,
+			$51, $52,
+			$53, $54, $55, $56, $57,
+			$58, $59, $60
 		)`, tableName)
 
 	stmt, err := tx.PrepareContext(ctx, query)
@@ -227,7 +223,6 @@ func (p *postgresDatabase) InsertBatch(ctx context.Context, results []runner.Res
 	for _, r := range results {
 		hashJSON, _ := json.Marshal(r.Hashes)
 		asnJSON, _ := json.Marshal(r.ASN)
-		tlsJSON, _ := json.Marshal(r.TLSData)
 		cspJSON, _ := json.Marshal(r.CSPData)
 		headerJSON, _ := json.Marshal(r.ResponseHeaders)
 		extractsJSON, _ := json.Marshal(r.Extracts)
@@ -241,8 +236,8 @@ func (p *postgresDatabase) InsertBatch(ctx context.Context, results []runner.Res
 			r.StatusCode, r.ContentLength, r.ContentType, r.Title, r.WebServer, r.ResponseTime,
 			r.Location, r.ResponseBody, r.BodyPreview, r.RawHeaders, r.Request,
 			r.HostIP, pq.Array(r.A), pq.Array(r.AAAA), pq.Array(r.CNAMEs), pq.Array(r.Resolvers), pq.Array(r.Fqdns), pq.Array(r.Domains), r.SNI,
-			pq.Array(r.Technologies), hashJSON, r.FavIconMMH3, r.FavIconMD5, r.FaviconPath, r.FaviconURL, r.JarmHash,
-			r.CDN, r.CDNName, r.CDNType, asnJSON, tlsJSON, cspJSON,
+			pq.Array(r.Technologies), hashJSON, r.FavIconMMH3, r.FavIconMD5, r.FaviconPath, r.FaviconURL,
+			r.CDN, r.CDNName, r.CDNType, asnJSON, cspJSON,
 			r.Failed, r.Error, r.WebSocket, r.HTTP2, r.Pipeline, r.VHost,
 			r.Words, r.Lines, headerJSON, extractsJSON, pq.Array(r.ExtractRegex),
 			chainJSON, pq.Array(r.ChainStatusCodes),

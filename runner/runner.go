@@ -34,7 +34,6 @@ import (
 	"github.com/projectdiscovery/fastdialer/fastdialer"
 	"github.com/projectdiscovery/httpx/common/customextract"
 	"github.com/projectdiscovery/httpx/common/dedup"
-	"github.com/projectdiscovery/httpx/common/hashes/jarm"
 	"github.com/projectdiscovery/httpx/common/inputformats"
 	"github.com/happyhackingspace/dit"
 	"github.com/projectdiscovery/httpx/common/authprovider"
@@ -196,8 +195,6 @@ func New(options *Options) (*Runner, error) {
 	httpxOptions.NetworkPolicy = np
 	httpxOptions.CDNCheckClient = options.CDNCheckClient
 
-	// Enables automatically tlsgrab if tlsprobe is requested
-	httpxOptions.TLSGrab = options.TLSGrab || options.TLSProbe
 	httpxOptions.Timeout = time.Duration(options.Timeout) * time.Second
 	httpxOptions.RetryMax = options.Retries
 	httpxOptions.FollowRedirects = options.FollowRedirects
@@ -225,7 +222,6 @@ func New(options *Options) (*Runner, error) {
 	} else {
 		httpxOptions.AutoReferer = options.AutoReferer
 	}
-	httpxOptions.ZTLS = options.ZTLS
 	httpxOptions.MaxResponseBodySizeToSave = int64(options.MaxResponseBodySizeToSave)
 	httpxOptions.MaxResponseBodySizeToRead = int64(options.MaxResponseBodySizeToRead)
 	// adjust response size saved according to the max one read by the server
@@ -233,7 +229,6 @@ func New(options *Options) (*Runner, error) {
 		httpxOptions.MaxResponseBodySizeToSave = httpxOptions.MaxResponseBodySizeToRead
 	}
 	httpxOptions.Resolvers = options.Resolvers
-	httpxOptions.TlsImpersonate = options.TlsImpersonate
 	httpxOptions.Protocol = httpx.Proto(options.Protocol)
 
 	var key, value string
@@ -254,8 +249,6 @@ func New(options *Options) (*Runner, error) {
 		value = strings.TrimSpace(tokens[1])
 		httpxOptions.CustomHeaders[key] = value
 	}
-	httpxOptions.SniName = options.SniName
-
 	runner.hp, err = httpx.New(&httpxOptions)
 	if err != nil {
 		gologger.Fatal().Msgf("Could not create httpx instance: %s\n", err)
@@ -321,7 +314,6 @@ func New(options *Options) (*Runner, error) {
 	scanopts.Base64ResponseInStdout = options.Base64ResponseInStdout
 	scanopts.ChainInStdout = options.ChainInStdout
 	scanopts.OutputWebSocket = options.OutputWebSocket
-	scanopts.TLSProbe = options.TLSProbe
 	scanopts.CSPProbe = options.CSPProbe
 	if options.RequestURI != "" {
 		scanopts.RequestURI = options.RequestURI
@@ -1097,10 +1089,6 @@ func (r *Runner) RunEnumeration() {
 		}
 
 		for resp := range output {
-			if r.options.SniName != "" {
-				resp.SNI = r.options.SniName
-			}
-
 			if resp.Err != nil {
 				// Change the error message if any port value passed explicitly
 				if url, err := r.parseURL(resp.URL); err == nil && url.Port() != "" {
@@ -1673,17 +1661,6 @@ func (r *Runner) process(t string, wg *syncutil.AdaptiveWaitGroup, hp *httpx.HTT
 						defer wg.Done()
 						result := r.analyze(hp, protocol, target, method, t, scanopts)
 						output <- result
-						if scanopts.TLSProbe && result.TLSData != nil {
-							for _, tt := range result.TLSData.SubjectAN {
-								if !r.testAndSet(tt) {
-									continue
-								}
-								r.process(tt, wg, hp, protocol, scanopts, output)
-							}
-							if r.testAndSet(result.TLSData.SubjectCN) {
-								r.process(result.TLSData.SubjectCN, wg, hp, protocol, scanopts, output)
-							}
-						}
 						if scanopts.CSPProbe && result.CSPData != nil {
 							scanopts.CSPProbe = false
 							domains := result.CSPData.Domains
@@ -1727,17 +1704,6 @@ func (r *Runner) process(t string, wg *syncutil.AdaptiveWaitGroup, hp *httpx.HTT
 						}
 						result := r.analyze(hp, protocol, target, method, t, scanopts)
 						output <- result
-						if scanopts.TLSProbe && result.TLSData != nil {
-							for _, tt := range result.TLSData.SubjectAN {
-								if !r.testAndSet(tt) {
-									continue
-								}
-								r.process(tt, wg, hp, protocol, scanopts, output)
-							}
-							if r.testAndSet(result.TLSData.SubjectCN) {
-								r.process(result.TLSData.SubjectCN, wg, hp, protocol, scanopts, output)
-							}
-						}
 					}(port, target, method, wantedProtocol)
 				}
 			}
@@ -2410,17 +2376,6 @@ retry:
 		}
 		builder.WriteRune(']')
 	}
-	jarmhash := ""
-	if r.options.Jarm {
-		jarmhash = jarm.Jarm(r.hp.Dialer, fullURL, r.options.Timeout)
-		builder.WriteString(" [")
-		if !scanopts.OutputWithNoColor {
-			builder.WriteString(aurora.Magenta(jarmhash).String())
-		} else {
-			_, _ = fmt.Fprintf(builder, "%s", jarmhash)
-		}
-		builder.WriteRune(']')
-	}
 	if scanopts.OutputWordsCount {
 		builder.WriteString(" [")
 		if !scanopts.OutputWithNoColor {
@@ -2640,7 +2595,6 @@ retry:
 		ResponseBody:     serverResponseRaw,
 		BodyPreview:      bodyPreview,
 		WebSocket:        isWebSocket,
-		TLSData:          resp.TLSData,
 		CSPData:          resp.CSPData,
 		Pipeline:         pipeline,
 		HTTP2:            http2,
@@ -2662,7 +2616,6 @@ retry:
 		FaviconURL:       faviconURL,
 		Hashes:           hashesMap,
 		Extracts:         extractResult,
-		JarmHash:         jarmhash,
 		Lines:            resp.Lines,
 		Words:            resp.Words,
 		ASN:              asnResponse,
