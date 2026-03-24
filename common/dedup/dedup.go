@@ -7,8 +7,6 @@ package dedup
 import (
 	"math/bits"
 	"sync"
-
-	"github.com/mfonda/simhash"
 )
 
 // defaultThreshold is the maximum Hamming distance at which two fingerprints
@@ -36,12 +34,21 @@ func WithStripDynamic(enabled bool) Option {
 	}
 }
 
+// WithContentType sets a content-type hint used by selectExtractor to choose
+// the best feature extraction strategy for the data being deduplicated.
+func WithContentType(ct string) Option {
+	return func(d *Deduplicator) {
+		d.contentType = ct
+	}
+}
+
 // Deduplicator detects exact and near-duplicate documents using simhash
 // fingerprints. It is safe for concurrent use.
 type Deduplicator struct {
 	// Immutable after construction.
 	threshold      uint8
 	stripDynamic   bool
+	contentType    string
 	preprocessor   func([]byte) []byte
 	featureHasher  func([]byte) uint64
 
@@ -59,14 +66,15 @@ func New(opts ...Option) *Deduplicator {
 		stripDynamic: true,
 		// Placeholder preprocessor — no-op until Task #5 replaces it.
 		preprocessor: func(b []byte) []byte { return b },
-		// Placeholder feature hasher — uses mfonda/simhash word feature set
-		// until Task #3 replaces it with shingle extraction.
-		featureHasher: func(b []byte) uint64 {
-			return simhash.Simhash(simhash.NewWordFeatureSet(b))
-		},
 	}
 	for _, o := range opts {
 		o(d)
+	}
+	// Wire featureHasher to use the content-type-aware extractor system.
+	// Capture contentType once so the closure does not hold a pointer to d.
+	ct := d.contentType
+	d.featureHasher = func(b []byte) uint64 {
+		return selectExtractor(ct, b).extract(b)
 	}
 	return d
 }
