@@ -2377,7 +2377,8 @@ retry:
 				hashHeader = hashes.Sha512([]byte(resp.RawHeaders))
 			case "simhash":
 				hashBody = hashes.Simhash(resp.Data)
-				hashHeader = hashes.Simhash([]byte(resp.RawHeaders))
+				// Header simhash is omitted: volatile headers (Date, Set-Cookie,
+				// X-Request-Id, CF-RAY, etc.) make it unreliable across requests.
 			}
 			if hashBody != "" {
 				hashesMap[fmt.Sprintf("body_%s", hashType)] = hashBody
