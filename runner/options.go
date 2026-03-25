@@ -301,7 +301,6 @@ type Options struct {
 	OutputFilterCdn           goflags.StringSlice
 	OutputMatchResponseTime   string
 	OutputFilterResponseTime  string
-	HealthCheck               bool
 	ListDSLVariable           bool
 	OutputFilterCondition     string
 	OutputMatchCondition      string
@@ -516,7 +515,6 @@ func ParseOptions() *Options {
 	)
 
 	flagSet.CreateGroup("debug", "Debug",
-		flagSet.BoolVarP(&options.HealthCheck, "hc", "health-check", false, "run diagnostic check up"),
 		flagSet.BoolVar(&options.Debug, "debug", false, "display request/response content in cli"),
 		flagSet.BoolVar(&options.DebugRequests, "debug-req", false, "display request content in cli"),
 		flagSet.BoolVar(&options.DebugResponse, "debug-resp", false, "display response content in cli"),
@@ -572,11 +570,6 @@ func ParseOptions() *Options {
 		if err := flagSet.MergeConfigFile(cfgFile); err != nil {
 			gologger.Fatal().Msgf("Could not read config: %s\n", err)
 		}
-	}
-
-	if options.HealthCheck {
-		gologger.Print().Msgf("%s\n", DoHealthCheck(options, flagSet))
-		os.Exit(0)
 	}
 
 	if options.StatsInterval != 0 {
