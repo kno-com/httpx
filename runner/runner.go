@@ -92,7 +92,6 @@ type Runner struct {
 	HostErrorsCache    gcache.Cache[string, int]
 	browser            *Browser
 	ditClassifier *dit.Classifier
-	pHashClusters      []pHashCluster
 	dedup              *dedup.Deduplicator
 	httpApiEndpoint    *Server
 	authProvider       authprovider.AuthProvider
@@ -122,20 +121,8 @@ func (r *Runner) IsInterrupted() bool {
 	}
 }
 
-// picked based on try-fail but it seems to close to one it's used https://www.hackerfactor.com/blog/index.php?/archives/432-Looks-Like-It.html#c1992
-var hammingDistanceThreshold int = 22
-
 // regex for stripping ANSI codes
 var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
-
-type pHashCluster struct {
-	BasePHash uint64     `json:"base_phash,omitempty" csv:"base_phash"`
-	Hashes    []pHashUrl `json:"hashes,omitempty" csv:"hashes"`
-}
-type pHashUrl struct {
-	PHash uint64 `json:"phash,omitempty" csv:"phash"`
-	Url   string `json:"url,omitempty" csv:"url"`
-}
 
 // New creates a new client for running enumeration process.
 func New(options *Options) (*Runner, error) {
@@ -335,7 +322,6 @@ func New(options *Options) (*Runner, error) {
 	scanopts.CPEDetect = options.CPEDetect || options.JSONOutput || options.CSVOutput
 	scanopts.WordPress = options.WordPress || options.JSONOutput || options.CSVOutput
 	scanopts.StoreChain = options.StoreChain
-	scanopts.StoreVisionReconClusters = options.StoreVisionReconClusters
 	scanopts.MaxResponseBodySizeToSave = options.MaxResponseBodySizeToSave
 	scanopts.MaxResponseBodySizeToRead = options.MaxResponseBodySizeToRead
 	scanopts.extractRegexps = make(map[string]*regexp.Regexp)
@@ -1332,27 +1318,7 @@ func (r *Runner) RunEnumeration() {
 					_, _ = indexScreenshotFile.WriteString(indexData)
 				}
 
-				if r.scanopts.StoreVisionReconClusters {
-					foundCluster := false
-					pHash, _ := resp.KnowledgeBase["pHash"].(uint64)
-					for i, cluster := range r.pHashClusters {
-						distance, _ := goimagehash.NewImageHash(pHash, goimagehash.PHash).Distance(goimagehash.NewImageHash(cluster.BasePHash, goimagehash.PHash))
-						if distance <= hammingDistanceThreshold {
-							r.pHashClusters[i].Hashes = append(r.pHashClusters[i].Hashes, pHashUrl{PHash: pHash, Url: resp.URL})
-							foundCluster = true
-							break
-						}
-					}
-
-					if !foundCluster {
-						newCluster := pHashCluster{
-							BasePHash: pHash,
-							Hashes:    []pHashUrl{{PHash: pHash, Url: resp.URL}},
-						}
-						r.pHashClusters = append(r.pHashClusters, newCluster)
-					}
 				}
-			}
 
 			//nolint:errcheck // this method needs a small refactor to reduce complexity
 			if plainFile != nil {
@@ -1545,25 +1511,6 @@ func (r *Runner) RunEnumeration() {
 
 	wgoutput.Wait()
 
-	if r.scanopts.StoreVisionReconClusters {
-		visionReconClusters := filepath.Join(r.options.StoreResponseDir, "vision_recon_clusters.json")
-		clusterReportJSON, err := json.Marshal(r.pHashClusters)
-		if err != nil {
-			gologger.Fatal().Msgf("Failed to marshal report to JSON: %v", err)
-		}
-		file, err := os.Create(visionReconClusters)
-		if err != nil {
-			gologger.Fatal().Msgf("Failed to create JSON file: %v", err)
-		}
-		defer func() {
-			_ = file.Close()
-		}()
-
-		_, err = file.Write(clusterReportJSON)
-		if err != nil {
-			gologger.Fatal().Msgf("Failed to write to JSON file: %v", err)
-		}
-	}
 }
 
 func handleStripAnsiCharacters(data string, skip bool) string {

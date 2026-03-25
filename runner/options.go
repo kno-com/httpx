@@ -79,7 +79,6 @@ type ScanOptions struct {
 	CPEDetect                 bool
 	WordPress                 bool
 	StoreChain                bool
-	StoreVisionReconClusters  bool
 	MaxResponseBodySizeToSave int
 	MaxResponseBodySizeToRead int
 	OutputExtractRegex        string
@@ -260,7 +259,6 @@ type Options struct {
 	RandomAgent               bool
 	AutoReferer               bool
 	StoreChain                bool
-	StoreVisionReconClusters  bool
 	Deny                      customlist.CustomList
 	Allow                     customlist.CustomList
 	MaxResponseBodySizeToSave int
@@ -474,7 +472,6 @@ func ParseOptions() *Options {
 		flagSet.BoolVarP(&options.Base64ResponseInStdout, "include-response-base64", "irrb", false, "include base64 encoded http request/response in JSON output (-json only)"),
 		flagSet.BoolVar(&options.ChainInStdout, "include-chain", false, "include redirect http chain in JSON output (-json only)"),
 		flagSet.BoolVar(&options.StoreChain, "store-chain", false, "include http redirect chain in responses (-sr only)"),
-		flagSet.BoolVarP(&options.StoreVisionReconClusters, "store-vision-recon-cluster", "svrc", false, "include visual recon clusters (-ss and -sr only)"),
 		flagSet.StringVarP(&options.Protocol, "protocol", "pr", "", "protocol to use (unknown, http11, http2 [experimental], http3 [experimental])"),
 		flagSet.StringVarP(&options.OutputFilterErrorPagePath, "filter-error-page-path", "fepp", "filtered_error_page.json", "path to store filtered error pages"),
 		flagSet.BoolVarP(&options.ResultDatabase, "result-db", "rdb", false, "store results in database"),
