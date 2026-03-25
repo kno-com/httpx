@@ -57,7 +57,6 @@ type ScanOptions struct {
 	OutputMethod              bool
 	ResponseHeadersInStdout   bool
 	ResponseInStdout          bool
-	Base64ResponseInStdout    bool
 	ChainInStdout             bool
 	OutputContentType         bool
 	HTTP2Probe                bool
@@ -69,7 +68,6 @@ type ScanOptions struct {
 	NoFallback                bool
 	NoFallbackScheme          bool
 	TechDetect                bool
-	StoreChain                bool
 	MaxResponseBodySizeToSave int
 	MaxResponseBodySizeToRead int
 	OutputExtractRegex        string
@@ -102,7 +100,6 @@ func (s *ScanOptions) Clone() *ScanOptions {
 		OutputMethod:              s.OutputMethod,
 		ResponseHeadersInStdout:   s.ResponseHeadersInStdout,
 		ResponseInStdout:          s.ResponseInStdout,
-		Base64ResponseInStdout:    s.Base64ResponseInStdout,
 		ChainInStdout:             s.ChainInStdout,
 		OutputContentType:         s.OutputContentType,
 		HTTP2Probe:                s.HTTP2Probe,
@@ -114,7 +111,6 @@ func (s *ScanOptions) Clone() *ScanOptions {
 		NoFallback:                s.NoFallback,
 		NoFallbackScheme:          s.NoFallbackScheme,
 		TechDetect:                s.TechDetect,
-		StoreChain:                s.StoreChain,
 		OutputExtractRegex:        s.OutputExtractRegex,
 		MaxResponseBodySizeToSave: s.MaxResponseBodySizeToSave,
 		MaxResponseBodySizeToRead: s.MaxResponseBodySizeToRead,
@@ -136,7 +132,6 @@ type Options struct {
 	filterStatusCode    []int
 	filterContentLength []int
 	Output              string
-	OutputAll           bool
 	StoreResponseDir    string
 	OmitBody            bool
 	// Deprecated: use Proxy
@@ -180,7 +175,6 @@ type Options struct {
 	StoreResponse             bool
 	JSONOutput                bool
 	CSVOutput                 bool
-	CSVOutputEncoding         string
 	Silent                    bool
 	Version                   bool
 	Verbose                   bool
@@ -189,7 +183,6 @@ type Options struct {
 	OutputWebSocket           bool
 	ResponseHeadersInStdout   bool
 	ResponseInStdout          bool
-	Base64ResponseInStdout    bool
 	ChainInStdout             bool
 	FollowHostRedirects       bool
 	MaxRedirects              int
@@ -206,7 +199,6 @@ type Options struct {
 	TechDetect                bool
 	protocol                  string
 	RandomAgent               bool
-	StoreChain                bool
 	Deny                      customlist.CustomList
 	Allow                     customlist.CustomList
 	MaxResponseBodySizeToSave int
@@ -350,18 +342,14 @@ func ParseOptions() *Options {
 
 	flagSet.CreateGroup("output", "Output",
 		flagSet.StringVarP(&options.Output, "output", "o", "", "file to write output results"),
-		flagSet.BoolVarP(&options.OutputAll, "output-all", "oa", false, "filename to write output results in all formats"),
 		flagSet.BoolVarP(&options.StoreResponse, "store-response", "sr", false, "store http response to output directory"),
 		flagSet.StringVarP(&options.StoreResponseDir, "store-response-dir", "srd", "", "store http response to custom directory"),
 		flagSet.BoolVarP(&options.OmitBody, "omit-body", "ob", false, "omit response body in output"),
 		flagSet.BoolVar(&options.CSVOutput, "csv", false, "store output in csv format"),
-		flagSet.StringVarP(&options.CSVOutputEncoding, "csv-output-encoding", "csvo", "", "define output encoding"),
 		flagSet.BoolVarP(&options.JSONOutput, "json", "j", false, "store output in JSONL(ines) format"),
 		flagSet.BoolVarP(&options.ResponseHeadersInStdout, "include-response-header", "irh", false, "include http response (headers) in JSON output (-json only)"),
 		flagSet.BoolVarP(&options.ResponseInStdout, "include-response", "irr", false, "include http request/response (headers + body) in JSON output (-json only)"),
-		flagSet.BoolVarP(&options.Base64ResponseInStdout, "include-response-base64", "irrb", false, "include base64 encoded http request/response in JSON output (-json only)"),
 		flagSet.BoolVar(&options.ChainInStdout, "include-chain", false, "include redirect http chain in JSON output (-json only)"),
-		flagSet.BoolVar(&options.StoreChain, "store-chain", false, "include http redirect chain in responses (-sr only)"),
 	)
 
 	flagSet.CreateGroup("configs", "Configurations",
@@ -406,15 +394,6 @@ func ParseOptions() *Options {
 	)
 
 	_ = flagSet.Parse()
-
-	if options.OutputAll && options.Output == "" {
-		gologger.Fatal().Msg("Please specify an output file using -o/-output when using -oa/-output-all")
-	}
-
-	if options.OutputAll {
-		options.JSONOutput = true
-		options.CSVOutput = true
-	}
 
 	if cfgFile != "" {
 		if !fileutil.FileExists(cfgFile) {
@@ -607,9 +586,6 @@ func (options *Options) configureOutput() {
 	}
 	if len(options.OutputMatchResponseTime) > 0 || len(options.OutputFilterResponseTime) > 0 {
 		options.OutputResponseTime = true
-	}
-	if options.CSVOutputEncoding != "" {
-		options.CSVOutput = true
 	}
 }
 

@@ -232,7 +232,6 @@ func New(options *Options) (*Runner, error) {
 	scanopts.ResponseHeadersInStdout = options.ResponseHeadersInStdout
 	scanopts.OutputWithNoColor = options.NoColor
 	scanopts.ResponseInStdout = options.ResponseInStdout
-	scanopts.Base64ResponseInStdout = options.Base64ResponseInStdout
 	scanopts.ChainInStdout = options.ChainInStdout
 	scanopts.OutputWebSocket = options.OutputWebSocket
 	if options.RequestURI != "" {
@@ -249,7 +248,6 @@ func New(options *Options) (*Runner, error) {
 	scanopts.NoFallback = options.NoFallback
 	scanopts.NoFallbackScheme = options.NoFallbackScheme
 	scanopts.TechDetect = options.TechDetect || options.JSONOutput || options.CSVOutput
-	scanopts.StoreChain = options.StoreChain
 	scanopts.MaxResponseBodySizeToSave = options.MaxResponseBodySizeToSave
 	scanopts.MaxResponseBodySizeToRead = options.MaxResponseBodySizeToRead
 	scanopts.extractRegexps = make(map[string]*regexp.Regexp)
@@ -749,21 +747,6 @@ func (r *Runner) RunEnumeration() {
 
 		var plainFile, jsonFile, csvFile, indexFile *os.File
 
-		if r.options.Output != "" && r.options.OutputAll {
-			plainFile = openOrCreateFile(r.options.Resume, r.options.Output)
-			defer func() {
-				_ = plainFile.Close()
-			}()
-			jsonFile = openOrCreateFile(r.options.Resume, r.options.Output+".json")
-			defer func() {
-				_ = jsonFile.Close()
-			}()
-			csvFile = openOrCreateFile(r.options.Resume, r.options.Output+".csv")
-			defer func() {
-				_ = csvFile.Close()
-			}()
-		}
-
 		jsonOrCsv := (r.options.JSONOutput || r.options.CSVOutput)
 		jsonAndCsv := (r.options.JSONOutput && r.options.CSVOutput)
 		if r.options.Output != "" && plainFile == nil && !jsonOrCsv {
@@ -796,20 +779,8 @@ func (r *Runner) RunEnumeration() {
 		}
 
 		if r.options.CSVOutput {
-			outEncoding := strings.ToLower(r.options.CSVOutputEncoding)
-			switch outEncoding {
-			case "": // no encoding do nothing
-			case "utf-8", "utf8":
-				bomUtf8 := []byte{0xEF, 0xBB, 0xBF}
-				_, err := csvFile.Write(bomUtf8)
-				if err != nil {
-					gologger.Fatal().Msgf("err on file write: %s\n", err)
-				}
-			default: // unknown encoding
-				gologger.Fatal().Msgf("unknown csv output encoding: %s\n", r.options.CSVOutputEncoding)
-			}
 			headers := Result{}.CSVHeader()
-			if !r.options.OutputAll && !jsonAndCsv {
+			if !jsonAndCsv {
 				gologger.Silent().Msgf("%s\n", headers)
 			}
 
@@ -1011,7 +982,7 @@ func (r *Runner) RunEnumeration() {
 				}
 			}
 
-			if !r.options.DisableStdout && (!jsonOrCsv || jsonAndCsv || r.options.OutputAll) {
+			if !r.options.DisableStdout && (!jsonOrCsv || jsonAndCsv) {
 				gologger.Silent().Msgf("%s\n", resp.str)
 			}
 
@@ -1025,7 +996,7 @@ func (r *Runner) RunEnumeration() {
 
 				var responsePath string
 				// store response
-				if r.scanopts.StoreResponse || r.scanopts.StoreChain {
+				if r.scanopts.StoreResponse {
 					if r.scanopts.OmitBody {
 						resp.Raw = strings.ReplaceAll(resp.Raw, resp.ResponseBody, "")
 					}
@@ -1038,9 +1009,6 @@ func (r *Runner) RunEnumeration() {
 						respRaw = respRaw[:r.scanopts.MaxResponseBodySizeToSave]
 					}
 					data := reqRaw
-					if r.options.StoreChain && resp.Response != nil && resp.Response.HasChain() {
-						data = append(data, append([]byte("\n"), []byte(resp.Response.GetChain())...)...)
-					}
 					data = append(data, respRaw...)
 					data = append(data, []byte("\n\n\n")...)
 					data = append(data, []byte(resp.URL)...)
@@ -1079,7 +1047,7 @@ func (r *Runner) RunEnumeration() {
 			if r.options.JSONOutput {
 				row := resp.JSON(&r.scanopts)
 
-				if !r.options.OutputAll && !jsonAndCsv {
+				if !jsonAndCsv {
 					gologger.Silent().Msgf("%s\n", row)
 				}
 
@@ -1092,7 +1060,7 @@ func (r *Runner) RunEnumeration() {
 			if r.options.CSVOutput {
 				row := resp.CSVRow(&r.scanopts)
 
-				if !r.options.OutputAll && !jsonAndCsv {
+				if !jsonAndCsv {
 					gologger.Silent().Msgf("%s\n", row)
 				}
 
@@ -1631,11 +1599,6 @@ retry:
 		request = string(requestDump)
 		responseHeaders = normalizeHeaders(resp.Headers)
 		rawResponseHeaders = resp.RawHeaders
-	} else if scanopts.Base64ResponseInStdout {
-		serverResponseRaw = stringz.Base64([]byte(respData))
-		request = stringz.Base64(requestDump)
-		responseHeaders = normalizeHeaders(resp.Headers)
-		rawResponseHeaders = stringz.Base64([]byte(resp.RawHeaders))
 	}
 
 	// web socket
@@ -1768,7 +1731,7 @@ retry:
 	hashesMap := make(map[string]interface{})
 	if scanopts.Hashes != "" {
 		hs := strings.Split(scanopts.Hashes, ",")
-		outputHashes := !(r.options.JSONOutput || r.options.OutputAll) //nolint
+		outputHashes := !r.options.JSONOutput //nolint
 		if outputHashes {
 			builder.WriteString(" [")
 		}
@@ -1849,7 +1812,7 @@ retry:
 
 	var responsePath, fileNameHash string
 	// store response
-	if scanopts.StoreResponse || scanopts.StoreChain {
+	if scanopts.StoreResponse {
 		if r.options.OmitBody {
 			resp.Raw = strings.ReplaceAll(resp.Raw, string(resp.Data), "")
 		}
@@ -1861,9 +1824,6 @@ retry:
 			respRaw = respRaw[:scanopts.MaxResponseBodySizeToSave]
 		}
 		data := reqRaw
-		if scanopts.StoreChain && resp.HasChain() {
-			data = append(data, append([]byte("\n"), []byte(resp.GetChain())...)...)
-		}
 		data = append(data, respRaw...)
 		data = append(data, []byte("\n\n\n")...)
 		data = append(data, []byte(fullURL)...)
