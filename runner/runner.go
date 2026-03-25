@@ -78,7 +78,6 @@ type Runner struct {
 	hp                 *httpx.HTTPX
 	wappalyzer         *wappalyzer.Wappalyze
 	cpeDetector        *CPEDetector
-	wpDetector         *WordPressDetector
 	scanopts           ScanOptions
 	hm                 *hybrid.HybridMap
 	excludeCdn         bool
@@ -143,13 +142,6 @@ func New(options *Options) (*Runner, error) {
 		runner.cpeDetector, err = NewCPEDetector()
 		if err != nil {
 			gologger.Warning().Msgf("Could not create CPE detector: %s", err)
-		}
-	}
-
-	if options.WordPress || options.JSONOutput || options.CSVOutput {
-		runner.wpDetector, err = NewWordPressDetector()
-		if err != nil {
-			gologger.Warning().Msgf("Could not create WordPress detector: %s", err)
 		}
 	}
 
@@ -313,7 +305,6 @@ func New(options *Options) (*Runner, error) {
 	scanopts.NoFallbackScheme = options.NoFallbackScheme
 	scanopts.TechDetect = options.TechDetect || options.JSONOutput || options.CSVOutput
 	scanopts.CPEDetect = options.CPEDetect || options.JSONOutput || options.CSVOutput
-	scanopts.WordPress = options.WordPress || options.JSONOutput || options.CSVOutput
 	scanopts.StoreChain = options.StoreChain
 	scanopts.MaxResponseBodySizeToSave = options.MaxResponseBodySizeToSave
 	scanopts.MaxResponseBodySizeToRead = options.MaxResponseBodySizeToRead
@@ -2337,31 +2328,6 @@ retry:
 		}
 	}
 
-	var wpInfo *WordPressInfo
-	if r.wpDetector != nil {
-		wpInfo = r.wpDetector.Detect(string(resp.Data))
-		if wpInfo.HasData() && r.options.WordPress {
-			if len(wpInfo.Plugins) > 0 {
-				builder.WriteString(" [")
-				if !scanopts.OutputWithNoColor {
-					builder.WriteString(aurora.Green("wp-plugins:" + strings.Join(wpInfo.Plugins, ",")).String())
-				} else {
-					builder.WriteString("wp-plugins:" + strings.Join(wpInfo.Plugins, ","))
-				}
-				builder.WriteRune(']')
-			}
-			if len(wpInfo.Themes) > 0 {
-				builder.WriteString(" [")
-				if !scanopts.OutputWithNoColor {
-					builder.WriteString(aurora.Green("wp-themes:" + strings.Join(wpInfo.Themes, ",")).String())
-				} else {
-					builder.WriteString("wp-themes:" + strings.Join(wpInfo.Themes, ","))
-				}
-				builder.WriteRune(']')
-			}
-		}
-	}
-
 	result := Result{
 		Timestamp:        time.Now(),
 		Request:          request,
@@ -2419,7 +2385,6 @@ retry:
 		FaviconData:       faviconData,
 		FileNameHash:      fileNameHash,
 		CPE:               cpeMatches,
-		WordPress:         wpInfo,
 	}
 	if resp.BodyDomains != nil {
 		result.Fqdns = resp.BodyDomains.Fqdns

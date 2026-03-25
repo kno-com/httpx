@@ -96,7 +96,6 @@ type Result struct {
 	Trace              *retryablehttp.TraceInfo      `json:"trace,omitempty" csv:"-" md:"-" mapstructure:"trace"`
 	FileNameHash       string                        `json:"-" csv:"-" md:"-" mapstructure:"-"`
 	CPE                []CPEInfo                     `json:"cpe,omitempty" csv:"cpe" md:"cpe" mapstructure:"cpe"`
-	WordPress          *WordPressInfo                `json:"wordpress,omitempty" csv:"wordpress" md:"wordpress" mapstructure:"wordpress"`
 }
 
 type Trace struct {
