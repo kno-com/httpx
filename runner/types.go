@@ -23,7 +23,6 @@ import (
 type Result struct {
 	Timestamp          time.Time                     `json:"timestamp,omitempty" csv:"timestamp" md:"timestamp" mapstructure:"timestamp"`
 	Err                error                         `json:"-" csv:"-" md:"-" mapstructure:"-"`
-	CSPData            *httpx.CSPData                `json:"csp,omitempty" csv:"-" md:"-" mapstructure:"csp"`
 	Hashes             map[string]interface{}        `json:"hash,omitempty" csv:"-" md:"-" mapstructure:"hash"`
 	ExtractRegex       []string                      `json:"extract_regex,omitempty" csv:"extract_regex" md:"extract_regex" mapstructure:"extract_regex"`
 	CDNName            string                        `json:"cdn_name,omitempty" csv:"cdn_name" md:"cdn_name" mapstructure:"cdn_name"`
@@ -73,8 +72,6 @@ type Result struct {
 	StoredResponsePath string                        `json:"stored_response_path,omitempty" csv:"stored_response_path" md:"stored_response_path" mapstructure:"stored_response_path"`
 	KnowledgeBase      map[string]interface{}        `json:"knowledgebase,omitempty" csv:"-" md:"-" mapstructure:"knowledgebase"`
 	Resolvers          []string                      `json:"resolvers,omitempty" csv:"resolvers" md:"resolvers" mapstructure:"resolvers"`
-	Fqdns              []string                      `json:"body_fqdn,omitempty" csv:"body_fqdn" md:"body_fqdn" mapstructure:"body_fqdn"`
-	Domains            []string                      `json:"body_domains,omitempty" csv:"body_domains" md:"body_domains" mapstructure:"body_domains"`
 	TechnologyDetails  map[string]wappalyzer.AppInfo `json:"-" csv:"-" md:"-" mapstructure:"-"`
 	RequestRaw         []byte                        `json:"-" csv:"-" md:"-" mapstructure:"-"`
 	Response           *httpx.Response               `json:"-" csv:"-" md:"-" mapstructure:"-"`

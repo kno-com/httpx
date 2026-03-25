@@ -61,7 +61,6 @@ type ScanOptions struct {
 	ResponseInStdout          bool
 	Base64ResponseInStdout    bool
 	ChainInStdout             bool
-	CSPProbe                  bool
 	OutputContentType         bool
 	Unsafe                    bool
 	HTTP2Probe                bool
@@ -109,7 +108,6 @@ func (s *ScanOptions) Clone() *ScanOptions {
 		ResponseInStdout:          s.ResponseInStdout,
 		Base64ResponseInStdout:    s.Base64ResponseInStdout,
 		ChainInStdout:             s.ChainInStdout,
-		CSPProbe:                  s.CSPProbe,
 		OutputContentType:         s.OutputContentType,
 		Unsafe:                    s.Unsafe,
 		HTTP2Probe:                s.HTTP2Probe,
@@ -205,11 +203,9 @@ type Options struct {
 	FollowHostRedirects       bool
 	MaxRedirects              int
 	OutputMethod              bool
-	CSPProbe                  bool
 	OutputContentType         bool
 	OutputIP                  bool
 	OutputCName               bool
-	ExtractFqdn               bool
 	Unsafe                    bool
 	Debug                     bool
 	DebugRequests             bool
@@ -328,7 +324,6 @@ func ParseOptions() *Options {
 		flagSet.BoolVarP(&options.OutputWebSocket, "websocket", "ws", false, "display server using websocket"),
 		flagSet.BoolVar(&options.OutputIP, "ip", false, "display host ip"),
 		flagSet.BoolVar(&options.OutputCName, "cname", false, "display host cname"),
-		flagSet.BoolVarP(&options.ExtractFqdn, "efqdn", "extract-fqdn", false, "get domain and subdomains from response body and header in jsonl/csv output"),
 		flagSet.DynamicVar(&options.OutputCDN, "cdn", "true", "display cdn/waf in use"),
 		flagSet.BoolVar(&options.Probe, "probe", false, "display probe status"),
 	)
@@ -380,7 +375,6 @@ func ParseOptions() *Options {
 		flagSet.BoolVarP(&options.ProbeAllIPS, "probe-all-ips", "pa", false, "probe all the ips associated with same host"),
 		flagSet.VarP(&options.CustomPorts, "ports", "p", "ports to probe (nmap syntax: eg http:1,2-10,11,https:80)"),
 		flagSet.StringVar(&options.RequestURIs, "path", "", "path or list of paths to probe (comma-separated, file)"),
-		flagSet.BoolVar(&options.CSPProbe, "csp-probe", false, "send http probes on the extracted CSP domains"),
 		flagSet.BoolVar(&options.HTTP2Probe, "http2", false, "probe and display server supporting HTTP2"),
 		flagSet.BoolVarP(&options.ListDSLVariable, "list-dsl-variables", "ldv", false, "list json output field keys name that support dsl matcher/filter"),
 	)

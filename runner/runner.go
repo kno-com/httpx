@@ -169,7 +169,6 @@ func New(options *Options) (*Runner, error) {
 	httpxOptions.UnsafeURI = options.RequestURI
 	httpxOptions.CdnCheck = options.OutputCDN
 	httpxOptions.ExcludeCdn = runner.excludeCdn
-	httpxOptions.ExtractFqdn = options.ExtractFqdn
 	if options.CustomHeaders.Has("User-Agent:") {
 		httpxOptions.RandomAgent = false
 	} else {
@@ -271,7 +270,6 @@ func New(options *Options) (*Runner, error) {
 	scanopts.Base64ResponseInStdout = options.Base64ResponseInStdout
 	scanopts.ChainInStdout = options.ChainInStdout
 	scanopts.OutputWebSocket = options.OutputWebSocket
-	scanopts.CSPProbe = options.CSPProbe
 	if options.RequestURI != "" {
 		scanopts.RequestURI = options.RequestURI
 	}
@@ -1466,17 +1464,6 @@ func (r *Runner) process(t string, wg *syncutil.AdaptiveWaitGroup, hp *httpx.HTT
 						defer wg.Done()
 						result := r.analyze(hp, protocol, target, method, t, scanopts)
 						output <- result
-						if scanopts.CSPProbe && result.CSPData != nil {
-							scanopts.CSPProbe = false
-							domains := result.CSPData.Domains
-							domains = append(domains, result.CSPData.Fqdns...)
-							for _, tt := range domains {
-								if !r.testAndSet(tt) {
-									continue
-								}
-								r.process(tt, wg, hp, protocol, scanopts, output)
-							}
-						}
 					}(target, method, prot)
 				}
 			}
@@ -2266,7 +2253,6 @@ retry:
 		ResponseBody:     serverResponseRaw,
 		BodyPreview:      bodyPreview,
 		WebSocket:        isWebSocket,
-		CSPData:          resp.CSPData,
 		HTTP2:            http2,
 		Method:           method,
 		Host:             parsed.Hostname(),
@@ -2296,10 +2282,6 @@ retry:
 		Response:          resp,
 		FaviconData:       faviconData,
 		FileNameHash:      fileNameHash,
-	}
-	if resp.BodyDomains != nil {
-		result.Fqdns = resp.BodyDomains.Fqdns
-		result.Domains = resp.BodyDomains.Domains
 	}
 	if r.options.Trace {
 		result.Trace = req.TraceInfo
