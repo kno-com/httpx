@@ -59,7 +59,6 @@ import (
 	"github.com/projectdiscovery/httpx/common/httpx"
 	"github.com/projectdiscovery/httpx/common/stringz"
 	"github.com/projectdiscovery/mapcidr"
-	"github.com/projectdiscovery/rawhttp"
 	errkit "github.com/projectdiscovery/utils/errkit"
 	fileutil "github.com/projectdiscovery/utils/file"
 	pdhttputil "github.com/projectdiscovery/utils/http"
@@ -159,19 +158,12 @@ func New(options *Options) (*Runner, error) {
 		options.Proxy = options.SocksProxy
 	}
 	httpxOptions.Proxy = options.Proxy
-	httpxOptions.Unsafe = options.Unsafe
-	httpxOptions.UnsafeURI = options.RequestURI
 	httpxOptions.CdnCheck = options.OutputCDN
 	httpxOptions.ExcludeCdn = runner.excludeCdn
 	if options.CustomHeaders.Has("User-Agent:") {
 		httpxOptions.RandomAgent = false
 	} else {
 		httpxOptions.RandomAgent = options.RandomAgent
-	}
-	if options.CustomHeaders.Has("Referer:") {
-		httpxOptions.AutoReferer = false
-	} else {
-		httpxOptions.AutoReferer = options.AutoReferer
 	}
 	httpxOptions.MaxResponseBodySizeToSave = int64(options.MaxResponseBodySizeToSave)
 	httpxOptions.MaxResponseBodySizeToRead = int64(options.MaxResponseBodySizeToRead)
@@ -185,13 +177,6 @@ func New(options *Options) (*Runner, error) {
 	httpxOptions.CustomHeaders = make(map[string]string)
 	for _, customHeader := range options.CustomHeaders {
 		tokens := strings.SplitN(customHeader, ":", two)
-		// rawhttp skips all checks
-		if options.Unsafe {
-			httpxOptions.CustomHeaders[customHeader] = ""
-			continue
-		}
-
-		// Continue normally
 		if len(tokens) < two {
 			continue
 		}
@@ -213,7 +198,7 @@ func New(options *Options) (*Runner, error) {
 			gologger.Fatal().Msgf("Could not read raw request from path '%s': %s\n", options.InputRawRequest, err)
 		}
 
-		rrMethod, rrPath, rrHeaders, rrBody, errParse := httputilz.ParseRequest(string(rawRequest), options.Unsafe)
+		rrMethod, rrPath, rrHeaders, rrBody, errParse := httputilz.ParseRequest(string(rawRequest), false)
 		if errParse != nil {
 			gologger.Fatal().Msgf("Could not parse raw request: %s\n", err)
 		}
@@ -227,23 +212,10 @@ func New(options *Options) (*Runner, error) {
 		options.RequestBody = rrBody
 	}
 
-	// disable automatic host header for rawhttp if manually specified
-	// as it can be malformed the best approach is to remove spaces and check for lowercase "host" word
-	if options.Unsafe {
-		for name := range runner.hp.CustomHeaders {
-			nameLower := strings.TrimSpace(strings.ToLower(name))
-			if strings.HasPrefix(nameLower, "host") {
-				rawhttp.AutomaticHostHeader(false)
-			}
-		}
-	}
 	if strings.EqualFold(options.Methods, "all") {
 		scanopts.Methods = pdhttputil.AllHTTPMethods()
 	} else if options.Methods != "" {
-		// if unsafe is specified then converts the methods to uppercase
-		if !options.Unsafe {
-			options.Methods = strings.ToUpper(options.Methods)
-		}
+		options.Methods = strings.ToUpper(options.Methods)
 		scanopts.Methods = append(scanopts.Methods, stringz.SplitByCharAndTrimSpace(options.Methods, ",")...)
 	}
 	if len(scanopts.Methods) == 0 {
@@ -268,7 +240,6 @@ func New(options *Options) (*Runner, error) {
 	}
 	scanopts.OutputContentType = options.OutputContentType
 	scanopts.RequestBody = options.RequestBody
-	scanopts.Unsafe = options.Unsafe
 	scanopts.HTTP2Probe = options.HTTP2Probe
 	scanopts.OutputMethod = options.OutputMethod
 	scanopts.OutputIP = options.OutputIP
@@ -313,7 +284,6 @@ func New(options *Options) (*Runner, error) {
 	scanopts.HostMaxErrors = options.HostMaxErrors
 	scanopts.ProbeAllIPS = options.ProbeAllIPS
 	scanopts.Favicon = options.Favicon
-	scanopts.LeaveDefaultPorts = options.LeaveDefaultPorts
 	scanopts.OutputLinesCount = options.OutputLinesCount
 	scanopts.OutputWordsCount = options.OutputWordsCount
 	scanopts.Hashes = options.Hashes
@@ -1405,7 +1375,7 @@ retry:
 
 	var reqURI string
 	// retry with unsafe
-	if err := URL.MergePath(scanopts.RequestURI, scanopts.Unsafe); err != nil {
+	if err := URL.MergePath(scanopts.RequestURI, false); err != nil {
 		gologger.Debug().Msgf("failed to merge paths of url %v and %v", URL.String(), scanopts.RequestURI)
 	}
 	var (
@@ -1432,13 +1402,11 @@ retry:
 		req.Host = target.CustomHost
 	}
 
-	if !scanopts.LeaveDefaultPorts {
-		switch {
-		case protocol == httpx.HTTP && strings.HasSuffix(req.Host, ":80"):
-			req.Host = strings.TrimSuffix(req.Host, ":80")
-		case protocol == httpx.HTTPS && strings.HasSuffix(req.Host, ":443"):
-			req.Host = strings.TrimSuffix(req.Host, ":443")
-		}
+	switch {
+	case protocol == httpx.HTTP && strings.HasSuffix(req.Host, ":80"):
+		req.Host = strings.TrimSuffix(req.Host, ":80")
+	case protocol == httpx.HTTPS && strings.HasSuffix(req.Host, ":443"):
+		req.Host = strings.TrimSuffix(req.Host, ":443")
 	}
 
 	hp.SetCustomHeaders(req, hp.CustomHeaders)
@@ -1454,45 +1422,30 @@ retry:
 
 	r.ratelimiter.Take()
 
-	// with rawhttp we should say to the server to close the connection, otherwise it will remain open
-	if scanopts.Unsafe {
-		req.Header.Add("Connection", "close")
-	}
 	resp, err := hp.Do(req, httpx.UnsafeOptions{URIPath: reqURI})
 	var requestDump []byte
-	if scanopts.Unsafe {
-		var errDump error
-		requestDump, errDump = rawhttp.DumpRequestRaw(req.Method, req.String(), reqURI, req.Header, req.Body, rawhttp.DefaultOptions)
-		if errDump != nil {
-			return Result{URL: URL.String(), Input: origInput, Err: errDump}
-		}
-	} else {
-		// Create a copy on the fly of the request body
-		if scanopts.RequestBody != "" {
-			req.ContentLength = int64(len(scanopts.RequestBody))
-			req.Body = io.NopCloser(strings.NewReader(scanopts.RequestBody))
-		}
-		var errDump error
-		requestDump, errDump = httputil.DumpRequestOut(req.Request, true)
-		if errDump != nil {
-			return Result{URL: URL.String(), Input: origInput, Err: errDump}
-		}
-		// The original req.Body gets modified indirectly by httputil.DumpRequestOut so we set it again to nil if it was empty
-		// Otherwise redirects like 307/308 would fail (as they require the body to be sent along)
-		if len(scanopts.RequestBody) == 0 {
-			req.ContentLength = 0
-			req.Body = nil
-		}
+	// Create a copy on the fly of the request body
+	if scanopts.RequestBody != "" {
+		req.ContentLength = int64(len(scanopts.RequestBody))
+		req.Body = io.NopCloser(strings.NewReader(scanopts.RequestBody))
+	}
+	var errDump error
+	requestDump, errDump = httputil.DumpRequestOut(req.Request, true)
+	if errDump != nil {
+		return Result{URL: URL.String(), Input: origInput, Err: errDump}
+	}
+	// The original req.Body gets modified indirectly by httputil.DumpRequestOut so we set it again to nil if it was empty
+	// Otherwise redirects like 307/308 would fail (as they require the body to be sent along)
+	if len(scanopts.RequestBody) == 0 {
+		req.ContentLength = 0
+		req.Body = nil
 	}
 	// fix the final output url
 	fullURL := req.String()
 	if parsedURL, errParse := r.parseURL(fullURL); errParse != nil {
 		return Result{URL: URL.String(), Input: origInput, Err: errParse}
 	} else {
-		if r.options.Unsafe {
-			parsedURL.Path = reqURI
-			// if the full url doesn't end with the custom path we pick the original input value
-		} else if !stringsutil.HasSuffixAny(fullURL, scanopts.RequestURI) {
+		if !stringsutil.HasSuffixAny(fullURL, scanopts.RequestURI) {
 			parsedURL.Path = scanopts.RequestURI
 		}
 		fullURL = parsedURL.String()
@@ -1508,11 +1461,7 @@ retry:
 	}
 
 	builder := &strings.Builder{}
-	if scanopts.LeaveDefaultPorts {
-		builder.WriteString(stringz.AddURLDefaultPort(fullURL))
-	} else {
-		builder.WriteString(stringz.RemoveURLDefaultPort(fullURL))
-	}
+	builder.WriteString(stringz.RemoveURLDefaultPort(fullURL))
 
 	if err != nil {
 		errString := ""
@@ -1578,9 +1527,6 @@ retry:
 			if i != len(resp.Chain)-1 {
 				builder.WriteRune(',')
 			}
-		}
-		if r.options.Unsafe {
-			setColor(resp.StatusCode)
 		}
 		builder.WriteRune(']')
 	}
@@ -1679,9 +1625,6 @@ retry:
 	}
 
 	respData := string(resp.Data)
-	if r.options.NoDecode {
-		respData = string(resp.RawData)
-	}
 
 	if scanopts.ResponseInStdout || r.options.OutputMatchCondition != "" || r.options.OutputFilterCondition != "" {
 		serverResponseRaw = string(respData)
@@ -2141,7 +2084,7 @@ func (r *Runner) HandleFaviconHash(hp *httpx.HTTPX, req *retryablehttp.Request, 
 			continue
 		}
 		resolvedNet := baseNet.ResolveReference(parsedHref)
-		resolvedURL, err := urlutil.ParseURL(resolvedNet.String(), r.options.Unsafe)
+		resolvedURL, err := urlutil.ParseURL(resolvedNet.String(), false)
 		if err != nil {
 			continue
 		}
@@ -2157,7 +2100,7 @@ func (r *Runner) HandleFaviconHash(hp *httpx.HTTPX, req *retryablehttp.Request, 
 			// Root fallback: directory-relative failed and raw had no leading slash
 			if !strings.HasPrefix(raw, "/") {
 				rootResolvedNet := baseNet.ResolveReference(&url.URL{Path: "/" + raw})
-				rootResolvedURL, err2 := urlutil.ParseURL(rootResolvedNet.String(), r.options.Unsafe)
+				rootResolvedURL, err2 := urlutil.ParseURL(rootResolvedNet.String(), false)
 				if err2 != nil {
 					continue
 				}
@@ -2341,11 +2284,11 @@ func (r *Runner) skipCDNPort(host string, port string) bool {
 	return false
 }
 
-// parseURL parses url based on cli option(unsafe)
+// parseURL parses a URL in safe mode.
 func (r *Runner) parseURL(url string) (*urlutil.URL, error) {
-	urlx, err := urlutil.ParseURL(url, r.options.Unsafe)
+	urlx, err := urlutil.ParseURL(url, false)
 	if err != nil {
-		gologger.Debug().Msgf("failed to parse url %v got %v in unsafe:%v", url, err, r.options.Unsafe)
+		gologger.Debug().Msgf("failed to parse url %v got %v", url, err)
 	}
 	return urlx, err
 }

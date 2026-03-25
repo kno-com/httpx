@@ -21,7 +21,6 @@ func init() {
 // Options contains configuration options for the client
 type Options struct {
 	RandomAgent      bool
-	AutoReferer      bool
 	DefaultUserAgent string
 	Proxy            string
 	// Deprecated: use Proxy
@@ -40,10 +39,8 @@ type Options struct {
 	FollowHostRedirects  bool
 	RespectHSTS          bool
 	MaxRedirects         int
-	Unsafe               bool
 	MaxResponseBodySizeToSave int64
 	MaxResponseBodySizeToRead int64
-	UnsafeURI                 string
 	Resolvers                 []string
 	customCookies             []*http.Cookie
 	NetworkPolicy             *networkpolicy.NetworkPolicy
@@ -58,7 +55,6 @@ var DefaultOptions = Options{
 	Timeout:                   30 * time.Second,
 	RetryMax:                  5,
 	MaxRedirects:              10,
-	Unsafe:                    false,
 	CdnCheck:                  "true",
 	ExcludeCdn:                false,
 	MaxResponseBodySizeToRead: DefaultMaxResponseBodySize,

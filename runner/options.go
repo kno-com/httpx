@@ -60,7 +60,6 @@ type ScanOptions struct {
 	Base64ResponseInStdout    bool
 	ChainInStdout             bool
 	OutputContentType         bool
-	Unsafe                    bool
 	HTTP2Probe                bool
 	OutputIP                  bool
 	OutputCName               bool
@@ -79,7 +78,6 @@ type ScanOptions struct {
 	HostMaxErrors             int
 	ProbeAllIPS               bool
 	Favicon                   bool
-	LeaveDefaultPorts         bool
 	OutputLinesCount          bool
 	OutputWordsCount          bool
 	Hashes                    string
@@ -107,7 +105,6 @@ func (s *ScanOptions) Clone() *ScanOptions {
 		Base64ResponseInStdout:    s.Base64ResponseInStdout,
 		ChainInStdout:             s.ChainInStdout,
 		OutputContentType:         s.OutputContentType,
-		Unsafe:                    s.Unsafe,
 		HTTP2Probe:                s.HTTP2Probe,
 		OutputIP:                  s.OutputIP,
 		OutputCName:               s.OutputCName,
@@ -124,7 +121,6 @@ func (s *ScanOptions) Clone() *ScanOptions {
 		HostMaxErrors:             s.HostMaxErrors,
 		Favicon:                   s.Favicon,
 		extractRegexps:            s.extractRegexps,
-		LeaveDefaultPorts:         s.LeaveDefaultPorts,
 		OutputLinesCount:          s.OutputLinesCount,
 		OutputWordsCount:          s.OutputWordsCount,
 		Hashes:                    s.Hashes,
@@ -201,7 +197,6 @@ type Options struct {
 	OutputContentType         bool
 	OutputIP                  bool
 	OutputCName               bool
-	Unsafe                    bool
 	Debug                     bool
 	HTTP2Probe                bool
 	OutputCDN                 string
@@ -211,7 +206,6 @@ type Options struct {
 	TechDetect                bool
 	protocol                  string
 	RandomAgent               bool
-	AutoReferer               bool
 	StoreChain                bool
 	Deny                      customlist.CustomList
 	Allow                     customlist.CustomList
@@ -233,7 +227,6 @@ type Options struct {
 	Favicon                   bool
 	OutputFilterFavicon       goflags.StringSlice
 	OutputMatchFavicon        goflags.StringSlice
-	LeaveDefaultPorts         bool
 	OutputLinesCount          bool
 	OutputMatchLinesCount     string
 	matchLinesCount           []int
@@ -257,7 +250,6 @@ type Options struct {
 	ExcludeOutputFields       goflags.StringSlice
 	//The OnResult callback function is invoked for each result. It is important to check for errors in the result before using Result.Err.
 	OnResult             OnResultCallback
-	NoDecode             bool
 	DisableStdin         bool
 	DisableStdout             bool
 
@@ -378,10 +370,8 @@ func ParseOptions() *Options {
 		flagSet.Var(&options.Allow, "allow", "allowed list of IP/CIDR's to process (file or comma separated)"),
 		flagSet.Var(&options.Deny, "deny", "denied list of IP/CIDR's to process (file or comma separated)"),
 		flagSet.BoolVar(&options.RandomAgent, "random-agent", true, "enable Random User-Agent to use"),
-		flagSet.BoolVar(&options.AutoReferer, "auto-referer", false, "set the Referer header to the current URL"),
 		flagSet.VarP(&options.CustomHeaders, "header", "H", "custom http headers to send with request"),
 		flagSet.StringVarP(&options.Proxy, "proxy", "http-proxy", "", "proxy (http|socks) to use (eg http://127.0.0.1:8080)"),
-		flagSet.BoolVar(&options.Unsafe, "unsafe", false, "send raw requests skipping golang normalization"),
 		flagSet.BoolVar(&options.Resume, "resume", false, "resume scan using resume.cfg"),
 		flagSet.BoolVarP(&options.FollowRedirects, "follow-redirects", "fr", false, "follow http redirects"),
 		flagSet.IntVarP(&options.MaxRedirects, "max-redirects", "maxr", 10, "max number of redirects to follow per host"),
@@ -391,8 +381,6 @@ func ParseOptions() *Options {
 		flagSet.StringVar(&options.RequestBody, "body", "", "post body to include in http request"),
 		flagSet.BoolVarP(&options.Stream, "stream", "s", false, "stream mode - start elaborating input targets without sorting"),
 		flagSet.BoolVarP(&options.SkipDedupe, "skip-dedupe", "sd", false, "disable dedupe input items (only used with stream mode)"),
-		flagSet.BoolVarP(&options.LeaveDefaultPorts, "leave-default-ports", "ldp", false, "leave default http/https ports in host header (eg. http://host:80 - https://host:443"),
-		flagSet.BoolVar(&options.NoDecode, "no-decode", false, "avoid decoding body"),
 		flagSet.BoolVar(&options.DisableStdin, "no-stdin", false, "Disable Stdin processing"),
 	)
 
