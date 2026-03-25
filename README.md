@@ -116,7 +116,6 @@ PROBES:
    -ip                     display host ip
    -cname                  display host cname
    -cdn                    display cdn/waf in use (default true)
-   -probe                  display probe status
 
 MATCHERS:
    -mc, -match-code string            match response with specified status code (-mc 200,302)
@@ -147,8 +146,6 @@ FILTERS:
    -fcdn, -filter-cdn string[]            filter host with specified cdn provider (cloudfront, fastly, google, etc.)
    -frt, -filter-response-time string     filter response with specified response time in seconds (-frt '> 1')
    -fdc, -filter-condition string         filter response with dsl expression condition
-   -strip                                 strips all tags in response. supported formats: html,xml (default html)
-   -lof, -list-output-fields              list of fields to output (comma separated)
    -eof, -exclude-output-fields string[]  exclude output fields output based on a condition
 
 RATE-LIMIT:
@@ -157,27 +154,21 @@ RATE-LIMIT:
    -rlm, -rate-limit-minute int  maximum number of requests to send per minute
 
 MISCELLANEOUS:
-   -pa, -probe-all-ips        probe all the ips associated with same host
-   -p, -ports string[]        ports to probe (nmap syntax: eg http:1,2-10,11,https:80)
-   -path string               path or list of paths to probe (comma-separated, file)
-   -http2                     probe and display server supporting HTTP2
-   -ldv, -list-dsl-variables  list json output field keys name that support dsl matcher/filter
+   -pa, -probe-all-ips  probe all the ips associated with same host
+   -p, -ports string[]  ports to probe (nmap syntax: eg http:1,2-10,11,https:80)
+   -path string         path or list of paths to probe (comma-separated, file)
+   -http2               probe and display server supporting HTTP2
 
 OUTPUT:
-   -o, -output string                  file to write output results
-   -oa, -output-all                    filename to write output results in all formats
-   -sr, -store-response                store http response to output directory
-   -srd, -store-response-dir string    store http response to custom directory
-   -ob, -omit-body                     omit response body in output
-   -csv                                store output in csv format
-   -csvo, -csv-output-encoding string  define output encoding
-   -j, -json                           store output in JSONL(ines) format
-   -irh, -include-response-header      include http response (headers) in JSON output (-json only)
-   -irr, -include-response             include http request/response (headers + body) in JSON output (-json only)
-   -irrb, -include-response-base64     include base64 encoded http request/response in JSON output (-json only)
-   -include-chain                      include redirect http chain in JSON output (-json only)
-   -store-chain                        include http redirect chain in responses (-sr only)
-   -pr, -protocol string               protocol to use (unknown, http11, http2 [experimental], http3 [experimental])
+   -o, -output string                file to write output results
+   -sr, -store-response              store http response to output directory
+   -srd, -store-response-dir string  store http response to custom directory
+   -ob, -omit-body                   omit response body in output
+   -csv                              store output in csv format
+   -j, -json                         store output in JSONL(ines) format
+   -irh, -include-response-header    include http response (headers) in JSON output (-json only)
+   -irr, -include-response           include http request/response (headers + body) in JSON output (-json only)
+   -include-chain                    include redirect http chain in JSON output (-json only)
 
 CONFIGURATIONS:
    -config string                path to the httpx configuration file (default $HOME/.config/httpx/config.yaml)
@@ -185,10 +176,8 @@ CONFIGURATIONS:
    -allow string[]               allowed list of IP/CIDR's to process (file or comma separated)
    -deny string[]                denied list of IP/CIDR's to process (file or comma separated)
    -random-agent                 enable Random User-Agent to use (default true)
-   -auto-referer                 set the Referer header to the current URL
    -H, -header string[]          custom http headers to send with request
    -http-proxy, -proxy string    proxy (http|socks) to use (eg http://127.0.0.1:8080)
-   -unsafe                       send raw requests skipping golang normalization
    -resume                       resume scan using resume.cfg
    -fr, -follow-redirects        follow http redirects
    -maxr, -max-redirects int     max number of redirects to follow per host (default 10)
@@ -198,22 +187,15 @@ CONFIGURATIONS:
    -body string                  post body to include in http request
    -s, -stream                   stream mode - start elaborating input targets without sorting
    -sd, -skip-dedupe             disable dedupe input items (only used with stream mode)
-   -ldp, -leave-default-ports    leave default http/https ports in host header (eg. http://host:80 - https://host:443
-   -no-decode                    avoid decoding body
    -no-stdin                     Disable Stdin processing
 
 DEBUG:
-   -debug                    display request/response content in cli
-   -debug-req                display request content in cli
-   -debug-resp               display response content in cli
-   -version                  display httpx version
-   -stats                    display scan statistic
-   -profile-mem string       optional httpx memory profile dump file
-   -silent                   silent mode
-   -v, -verbose              verbose mode
-   -si, -stats-interval int  number of seconds to wait between showing a statistics update (default: 5)
-   -nc, -no-color            disable colors in cli output
-   -tr, -trace               trace
+   -debug               display request/response content in cli
+   -version             display httpx version
+   -profile-mem string  optional httpx memory profile dump file
+   -silent              silent mode
+   -v, -verbose         verbose mode
+   -nc, -no-color       disable colors in cli output
 
 OPTIMIZATIONS:
    -nf, -no-fallback                  display both probed protocol (HTTPS and HTTP)
