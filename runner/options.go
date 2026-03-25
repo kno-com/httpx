@@ -160,8 +160,6 @@ type Options struct {
 	OutputMatchStatusCode     string
 	OutputMatchContentLength  string
 	OutputFilterStatusCode    string
-	// Deprecated: use OutputFilterPageType with "error" instead.
-	OutputFilterErrorPage bool
 	OutputFilterPageType      goflags.StringSlice
 	FilterOutDuplicates       bool
 	OutputFilterContentLength string
@@ -187,7 +185,6 @@ type Options struct {
 	RespectHSTS               bool
 	StoreResponse             bool
 	JSONOutput                bool
-	MarkDownOutput            bool
 	CSVOutput                 bool
 	CSVOutputEncoding         string
 	Silent                    bool
@@ -271,13 +268,9 @@ type Options struct {
 	OnResult             OnResultCallback
 	NoDecode             bool
 	DisableStdin         bool
-	HttpApiEndpoint      string
 	Protocol                  string
-	OutputFilterErrorPagePath string
 	DisableStdout             bool
 
-	// SecretFile is the path to the secret file for authentication
-	SecretFile string
 	// OnClose adds a callback function that is invoked when httpx is closed
 	// to be exact at end of existing closures
 	OnClose func()
@@ -349,7 +342,6 @@ func ParseOptions() *Options {
 	flagSet.CreateGroup("filters", "Filters",
 		flagSet.StringVarP(&options.OutputFilterStatusCode, "filter-code", "fc", "", "filter response with specified status code (-fc 403,401)"),
 		flagSet.StringSliceVarP(&options.OutputFilterPageType, "filter-page-type", "fpt", nil, "filter response with specified page type (e.g. -fpt login,captcha,parked)", goflags.CommaSeparatedStringSliceOptions),
-		flagSet.BoolVarP(&options.OutputFilterErrorPage, "filter-error-page", "fep", false, "[DEPRECATED: use -fpt] filter response with ML based error page detection"),
 		flagSet.BoolVarP(&options.FilterOutDuplicates, "filter-duplicates", "fd", false, "filter out near-duplicate responses (only first response is retained)"),
 		flagSet.StringVarP(&options.OutputFilterContentLength, "filter-length", "fl", "", "filter response with specified content length (-fl 23,33)"),
 		flagSet.StringVarP(&options.OutputFilterLinesCount, "filter-line-count", "flc", "", "filter response body with specified line count (-flc 423,532)"),
@@ -388,14 +380,12 @@ func ParseOptions() *Options {
 		flagSet.BoolVar(&options.CSVOutput, "csv", false, "store output in csv format"),
 		flagSet.StringVarP(&options.CSVOutputEncoding, "csv-output-encoding", "csvo", "", "define output encoding"),
 		flagSet.BoolVarP(&options.JSONOutput, "json", "j", false, "store output in JSONL(ines) format"),
-		flagSet.BoolVarP(&options.MarkDownOutput, "markdown", "md", false, "store output in Markdown table format"),
 		flagSet.BoolVarP(&options.ResponseHeadersInStdout, "include-response-header", "irh", false, "include http response (headers) in JSON output (-json only)"),
 		flagSet.BoolVarP(&options.ResponseInStdout, "include-response", "irr", false, "include http request/response (headers + body) in JSON output (-json only)"),
 		flagSet.BoolVarP(&options.Base64ResponseInStdout, "include-response-base64", "irrb", false, "include base64 encoded http request/response in JSON output (-json only)"),
 		flagSet.BoolVar(&options.ChainInStdout, "include-chain", false, "include redirect http chain in JSON output (-json only)"),
 		flagSet.BoolVar(&options.StoreChain, "store-chain", false, "include http redirect chain in responses (-sr only)"),
 		flagSet.StringVarP(&options.Protocol, "protocol", "pr", "", "protocol to use (unknown, http11, http2 [experimental], http3 [experimental])"),
-		flagSet.StringVarP(&options.OutputFilterErrorPagePath, "filter-error-page-path", "fepp", "filtered_error_page.json", "path to store filtered error pages"),
 	)
 
 	flagSet.CreateGroup("configs", "Configurations",
@@ -420,8 +410,6 @@ func ParseOptions() *Options {
 		flagSet.BoolVarP(&options.LeaveDefaultPorts, "leave-default-ports", "ldp", false, "leave default http/https ports in host header (eg. http://host:80 - https://host:443"),
 		flagSet.BoolVar(&options.NoDecode, "no-decode", false, "avoid decoding body"),
 		flagSet.BoolVar(&options.DisableStdin, "no-stdin", false, "Disable Stdin processing"),
-		flagSet.StringVarP(&options.HttpApiEndpoint, "http-api-endpoint", "hae", "", "experimental http api endpoint"),
-		flagSet.StringVarP(&options.SecretFile, "secret-file", "sf", "", "path to the secret file for authentication"),
 	)
 
 	flagSet.CreateGroup("debug", "Debug",
@@ -530,9 +518,6 @@ func (options *Options) ValidateOptions() error {
 		return fmt.Errorf("file '%s' does not exist", options.InputRawRequest)
 	}
 
-	if options.SecretFile != "" && !fileutil.FileExists(options.SecretFile) {
-		return fmt.Errorf("secret file '%s' does not exist", options.SecretFile)
-	}
 	if options.InputMode != "" && inputformats.GetFormat(options.InputMode) == nil {
 		return fmt.Errorf("invalid input mode '%s', supported formats: %s", options.InputMode, inputformats.SupportedFormats())
 	}
@@ -687,10 +672,6 @@ func (options *Options) configureOutput() {
 	}
 	if options.CSVOutputEncoding != "" {
 		options.CSVOutput = true
-	}
-	if options.OutputFilterErrorPage && len(options.OutputFilterPageType) == 0 {
-		gologger.Info().Msg("-fep is deprecated, use -fpt error instead")
-		options.OutputFilterPageType = goflags.StringSlice{"error"}
 	}
 }
 

@@ -32,7 +32,6 @@ import (
 	"github.com/projectdiscovery/httpx/common/dedup"
 	"github.com/projectdiscovery/httpx/common/inputformats"
 	"github.com/happyhackingspace/dit"
-	"github.com/projectdiscovery/httpx/common/authprovider"
 	"github.com/projectdiscovery/mapcidr/asn"
 	"github.com/projectdiscovery/networkpolicy"
 	"github.com/projectdiscovery/utils/structs"
@@ -84,8 +83,6 @@ type Runner struct {
 	HostErrorsCache    gcache.Cache[string, int]
 	ditClassifier *dit.Classifier
 	dedup              *dedup.Deduplicator
-	httpApiEndpoint    *Server
-	authProvider       authprovider.AuthProvider
 	interruptCh        chan struct{}
 }
 
@@ -364,27 +361,6 @@ func New(options *Options) (*Runner, error) {
 			gologger.Warning().Msgf("Could not initialize page classifier: %s", err)
 		}
 		runner.ditClassifier = ditClassifier
-	}
-
-	if options.SecretFile != "" {
-		authProviderOpts := &authprovider.AuthProviderOptions{
-			SecretsFiles: []string{options.SecretFile},
-		}
-		runner.authProvider, err = authprovider.NewAuthProvider(authProviderOpts)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not create auth provider")
-		}
-	}
-
-	if options.HttpApiEndpoint != "" {
-		apiServer := NewServer(options.HttpApiEndpoint, options)
-		gologger.Info().Msgf("Listening api endpoint on: %s", options.HttpApiEndpoint)
-		runner.httpApiEndpoint = apiServer
-		go func() {
-			if err := apiServer.Start(); err != nil {
-				gologger.Error().Msgf("Failed to start API server: %s", err)
-			}
-		}()
 	}
 
 	return runner, nil
@@ -831,9 +807,6 @@ func (r *Runner) Close() {
 	if r.options.ShowStatistics {
 		_ = r.stats.Stop()
 	}
-	if r.options.HttpApiEndpoint != "" {
-		_ = r.httpApiEndpoint.Stop()
-	}
 	if r.options.OnClose != nil {
 		r.options.OnClose()
 	}
@@ -888,8 +861,7 @@ func (r *Runner) RunEnumeration() {
 			}
 		}()
 
-		var plainFile, jsonFile, csvFile, mdFile, indexFile *os.File
-		markdownHeaderWritten := false // guard to prevent writing the header multiple times
+		var plainFile, jsonFile, csvFile, indexFile *os.File
 
 		if r.options.Output != "" && r.options.OutputAll {
 			plainFile = openOrCreateFile(r.options.Resume, r.options.Output)
@@ -904,15 +876,11 @@ func (r *Runner) RunEnumeration() {
 			defer func() {
 				_ = csvFile.Close()
 			}()
-			mdFile = openOrCreateFile(r.options.Resume, r.options.Output+".md")
-			defer func() {
-				_ = mdFile.Close()
-			}()
 		}
 
-		jsonOrCsvOrMD := (r.options.JSONOutput || r.options.CSVOutput || r.options.MarkDownOutput)
-		jsonAndCsvAndMD := (r.options.JSONOutput && r.options.CSVOutput && r.options.MarkDownOutput)
-		if r.options.Output != "" && plainFile == nil && !jsonOrCsvOrMD {
+		jsonOrCsv := (r.options.JSONOutput || r.options.CSVOutput)
+		jsonAndCsv := (r.options.JSONOutput && r.options.CSVOutput)
+		if r.options.Output != "" && plainFile == nil && !jsonOrCsv {
 			plainFile = openOrCreateFile(r.options.Resume, r.options.Output)
 			defer func() {
 				_ = plainFile.Close()
@@ -921,7 +889,7 @@ func (r *Runner) RunEnumeration() {
 
 		if r.options.Output != "" && r.options.JSONOutput && jsonFile == nil {
 			ext := ""
-			if jsonAndCsvAndMD {
+			if jsonAndCsv {
 				ext = ".json"
 			}
 			jsonFile = openOrCreateFile(r.options.Resume, r.options.Output+ext)
@@ -932,23 +900,12 @@ func (r *Runner) RunEnumeration() {
 
 		if r.options.Output != "" && r.options.CSVOutput && csvFile == nil {
 			ext := ""
-			if jsonAndCsvAndMD {
+			if jsonAndCsv {
 				ext = ".csv"
 			}
 			csvFile = openOrCreateFile(r.options.Resume, r.options.Output+ext)
 			defer func() {
 				_ = csvFile.Close()
-			}()
-		}
-
-		if r.options.Output != "" && r.options.MarkDownOutput && mdFile == nil {
-			ext := ""
-			if jsonAndCsvAndMD {
-				ext = ".md"
-			}
-			mdFile = openOrCreateFile(r.options.Resume, r.options.Output+ext)
-			defer func() {
-				_ = mdFile.Close()
 			}()
 		}
 
@@ -966,7 +923,7 @@ func (r *Runner) RunEnumeration() {
 				gologger.Fatal().Msgf("unknown csv output encoding: %s\n", r.options.CSVOutputEncoding)
 			}
 			headers := Result{}.CSVHeader()
-			if !r.options.OutputAll && !jsonAndCsvAndMD {
+			if !r.options.OutputAll && !jsonAndCsv {
 				gologger.Silent().Msgf("%s\n", headers)
 			}
 
@@ -1025,7 +982,6 @@ func (r *Runner) RunEnumeration() {
 			if len(r.options.OutputFilterPageType) > 0 {
 				if pageType, ok := resp.KnowledgeBase["PageType"].(string); ok {
 					if stringsutil.EqualFoldAny(pageType, r.options.OutputFilterPageType...) {
-						logFilteredErrorPage(r.options.OutputFilterErrorPagePath, resp.URL)
 						continue
 					}
 				}
@@ -1169,7 +1125,7 @@ func (r *Runner) RunEnumeration() {
 				}
 			}
 
-			if !r.options.DisableStdout && (!jsonOrCsvOrMD || jsonAndCsvAndMD || r.options.OutputAll) {
+			if !r.options.DisableStdout && (!jsonOrCsv || jsonAndCsv || r.options.OutputAll) {
 				gologger.Silent().Msgf("%s\n", resp.str)
 			}
 
@@ -1237,7 +1193,7 @@ func (r *Runner) RunEnumeration() {
 			if r.options.JSONOutput {
 				row := resp.JSON(&r.scanopts)
 
-				if !r.options.OutputAll && !jsonAndCsvAndMD {
+				if !r.options.OutputAll && !jsonAndCsv {
 					gologger.Silent().Msgf("%s\n", row)
 				}
 
@@ -1250,35 +1206,13 @@ func (r *Runner) RunEnumeration() {
 			if r.options.CSVOutput {
 				row := resp.CSVRow(&r.scanopts)
 
-				if !r.options.OutputAll && !jsonAndCsvAndMD {
+				if !r.options.OutputAll && !jsonAndCsv {
 					gologger.Silent().Msgf("%s\n", row)
 				}
 
 				//nolint:errcheck // this method needs a small refactor to reduce complexity
 				if csvFile != nil {
 					csvFile.WriteString(row + "\n")
-				}
-			}
-
-			if r.options.MarkDownOutput || r.options.OutputAll {
-				if !markdownHeaderWritten {
-					header := resp.MarkdownHeader()
-					if !r.options.OutputAll {
-						gologger.Silent().Msgf("%s", header)
-					}
-					if mdFile != nil {
-						_, _ = mdFile.WriteString(header)
-					}
-					markdownHeaderWritten = true
-				}
-
-				row := resp.MarkdownRow(&r.scanopts)
-
-				if !r.options.OutputAll {
-					gologger.Silent().Msgf("%s", row)
-				}
-				if mdFile != nil {
-					_, _ = mdFile.WriteString(row)
 				}
 			}
 
@@ -1374,47 +1308,6 @@ func handleStripAnsiCharacters(data string, skip bool) string {
 		return data
 	}
 	return stripANSI(data)
-}
-
-func logFilteredErrorPage(fileName, url string) {
-	dir := filepath.Dir(fileName)
-	if !fileutil.FolderExists(dir) {
-		err := fileutil.CreateFolder(dir)
-		if err != nil {
-			gologger.Fatal().Msgf("Could not create directory '%s': %s\n", dir, err)
-			return
-		}
-	}
-
-	file, err := fileutil.OpenOrCreateFile(fileName)
-	if err != nil {
-		gologger.Fatal().Msgf("Could not open/create output file '%s': %s\n", fileName, err)
-		return
-	}
-	defer func() {
-		_ = file.Close()
-	}()
-
-	info := map[string]interface{}{
-		"url":           url,
-		"time_filtered": time.Now(),
-	}
-
-	data, err := json.Marshal(info)
-	if err != nil {
-		fmt.Println("Failed to marshal JSON:", err)
-		return
-	}
-
-	if _, err := file.Write(data); err != nil {
-		gologger.Fatal().Msgf("Failed to write to '%s': %s\n", fileName, err)
-		return
-	}
-
-	if _, err := file.WriteString("\n"); err != nil {
-		gologger.Fatal().Msgf("Failed to write newline to '%s': %s\n", fileName, err)
-		return
-	}
 }
 
 func openOrCreateFile(resume bool, filename string) *os.File {
@@ -1636,15 +1529,6 @@ retry:
 	}
 
 	hp.SetCustomHeaders(req, hp.CustomHeaders)
-
-	// Apply auth strategies if auth provider is configured
-	if r.authProvider != nil {
-		if strategies := r.authProvider.LookupURLX(URL); len(strategies) > 0 {
-			for _, strategy := range strategies {
-				strategy.ApplyOnRR(req)
-			}
-		}
-	}
 
 	// We set content-length even if zero to allow net/http to follow 307/308 redirects (it fails on unknown size)
 	if scanopts.RequestBody != "" {
