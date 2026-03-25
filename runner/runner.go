@@ -77,7 +77,6 @@ type Runner struct {
 	options            *Options
 	hp                 *httpx.HTTPX
 	wappalyzer         *wappalyzer.Wappalyze
-	cpeDetector        *CPEDetector
 	scanopts           ScanOptions
 	hm                 *hybrid.HybridMap
 	excludeCdn         bool
@@ -127,22 +126,10 @@ func New(options *Options) (*Runner, error) {
 	if options.Wappalyzer != nil {
 		runner.wappalyzer = options.Wappalyzer
 	} else if options.TechDetect || options.JSONOutput || options.CSVOutput {
-		runner.wappalyzer, err = func() (*wappalyzer.Wappalyze, error) {
-			if options.CustomFingerprintFile != "" {
-				return wappalyzer.NewFromFile(options.CustomFingerprintFile, true, true)
-			}
-			return wappalyzer.New()
-		}()
+		runner.wappalyzer, err = wappalyzer.New()
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create wappalyzer client")
-	}
-
-	if options.CPEDetect || options.JSONOutput || options.CSVOutput {
-		runner.cpeDetector, err = NewCPEDetector()
-		if err != nil {
-			gologger.Warning().Msgf("Could not create CPE detector: %s", err)
-		}
 	}
 
 	if options.StoreResponseDir != "" {
@@ -304,7 +291,6 @@ func New(options *Options) (*Runner, error) {
 	scanopts.NoFallback = options.NoFallback
 	scanopts.NoFallbackScheme = options.NoFallbackScheme
 	scanopts.TechDetect = options.TechDetect || options.JSONOutput || options.CSVOutput
-	scanopts.CPEDetect = options.CPEDetect || options.JSONOutput || options.CSVOutput
 	scanopts.StoreChain = options.StoreChain
 	scanopts.MaxResponseBodySizeToSave = options.MaxResponseBodySizeToSave
 	scanopts.MaxResponseBodySizeToRead = options.MaxResponseBodySizeToRead
@@ -2312,22 +2298,6 @@ retry:
 		}
 	}
 
-	var cpeMatches []CPEInfo
-	if r.cpeDetector != nil {
-		cpeMatches = r.cpeDetector.Detect(title, string(resp.Data), faviconMMH3)
-		if len(cpeMatches) > 0 && r.options.CPEDetect {
-			for _, cpe := range cpeMatches {
-				builder.WriteString(" [")
-				if !scanopts.OutputWithNoColor {
-					builder.WriteString(aurora.Cyan(cpe.CPE).String())
-				} else {
-					builder.WriteString(cpe.CPE)
-				}
-				builder.WriteRune(']')
-			}
-		}
-	}
-
 	result := Result{
 		Timestamp:        time.Now(),
 		Request:          request,
@@ -2384,7 +2354,6 @@ retry:
 		Response:          resp,
 		FaviconData:       faviconData,
 		FileNameHash:      fileNameHash,
-		CPE:               cpeMatches,
 	}
 	if resp.BodyDomains != nil {
 		result.Fqdns = resp.BodyDomains.Fqdns
