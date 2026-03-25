@@ -7,12 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-faker/faker/v4"
-	"github.com/go-faker/faker/v4/pkg/options"
 	mapstructure "github.com/go-viper/mapstructure/v2"
 	"github.com/projectdiscovery/dsl"
 	"github.com/projectdiscovery/gologger"
-	mapsutil "github.com/projectdiscovery/utils/maps"
 	wappalyzer "github.com/projectdiscovery/wappalyzergo"
 
 	"github.com/projectdiscovery/httpx/common/httpx"
@@ -76,25 +73,6 @@ type Result struct {
 	Response           *httpx.Response               `json:"-" csv:"-" md:"-" mapstructure:"-"`
 	FaviconData        []byte                        `json:"-" csv:"-" md:"-" mapstructure:"-"`
 	FileNameHash       string                        `json:"-" csv:"-" md:"-" mapstructure:"-"`
-}
-
-// function to get dsl variables from result struct
-func dslVariables() ([]string, error) {
-	fakeResult := Result{}
-	fieldsToIgnore := []string{"Hashes", "ResponseHeaders", "Err", "KnowledgeBase"}
-	if err := faker.FakeData(&fakeResult, options.WithFieldsToIgnore(fieldsToIgnore...), options.WithIgnoreInterface(true)); err != nil {
-		return nil, err
-	}
-	m, err := resultToMap(fakeResult)
-	if err != nil {
-		return nil, err
-	}
-	vars := []string{"header_md5", "header_mmh3", "header_sha256", "body_md5", "body_mmh3", "body_sha256", "body_simhash"}
-	mapsutil.Walk(m, func(k string, v any) {
-		vars = append(vars, k)
-	})
-
-	return vars, nil
 }
 
 func evalDslExpr(result Result, dslExpr string) bool {

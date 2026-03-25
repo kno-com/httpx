@@ -27,7 +27,6 @@ import (
 	"github.com/projectdiscovery/networkpolicy"
 	fileutil "github.com/projectdiscovery/utils/file"
 	sliceutil "github.com/projectdiscovery/utils/slice"
-	"github.com/projectdiscovery/utils/structs"
 	wappalyzer "github.com/projectdiscovery/wappalyzergo"
 )
 
@@ -211,8 +210,6 @@ type Options struct {
 	NoFallbackScheme          bool
 	TechDetect                bool
 	protocol                  string
-	ShowStatistics            bool
-	StatsInterval             int
 	RandomAgent               bool
 	AutoReferer               bool
 	StoreChain                bool
@@ -254,11 +251,9 @@ type Options struct {
 	OutputFilterCdn           goflags.StringSlice
 	OutputMatchResponseTime   string
 	OutputFilterResponseTime  string
-	ListDSLVariable           bool
 	OutputFilterCondition     string
 	OutputMatchCondition      string
 	StripFilter               string
-	ListOutputFields          bool
 	ExcludeOutputFields       goflags.StringSlice
 	//The OnResult callback function is invoked for each result. It is important to check for errors in the result before using Result.Err.
 	OnResult             OnResultCallback
@@ -345,7 +340,6 @@ func ParseOptions() *Options {
 		flagSet.StringVarP(&options.OutputFilterResponseTime, "filter-response-time", "frt", "", "filter response with specified response time in seconds (-frt '> 1')"),
 		flagSet.StringVarP(&options.OutputFilterCondition, "filter-condition", "fdc", "", "filter response with dsl expression condition"),
 		flagSet.DynamicVar(&options.StripFilter, "strip", "html", "strips all tags in response. supported formats: html,xml"),
-		flagSet.BoolVarP(&options.ListOutputFields, "list-output-fields", "lof", false, "list of fields to output (comma separated)"),
 		flagSet.StringSliceVarP(&options.ExcludeOutputFields, "exclude-output-fields", "eof", nil, "exclude output fields output based on a condition", goflags.NormalizedOriginalStringSliceOptions),
 	)
 
@@ -360,7 +354,6 @@ func ParseOptions() *Options {
 		flagSet.VarP(&options.CustomPorts, "ports", "p", "ports to probe (nmap syntax: eg http:1,2-10,11,https:80)"),
 		flagSet.StringVar(&options.RequestURIs, "path", "", "path or list of paths to probe (comma-separated, file)"),
 		flagSet.BoolVar(&options.HTTP2Probe, "http2", false, "probe and display server supporting HTTP2"),
-		flagSet.BoolVarP(&options.ListDSLVariable, "list-dsl-variables", "ldv", false, "list json output field keys name that support dsl matcher/filter"),
 	)
 
 	flagSet.CreateGroup("output", "Output",
@@ -406,11 +399,9 @@ func ParseOptions() *Options {
 	flagSet.CreateGroup("debug", "Debug",
 		flagSet.BoolVar(&options.Debug, "debug", false, "display request/response content in cli"),
 		flagSet.BoolVar(&options.Version, "version", false, "display httpx version"),
-		flagSet.BoolVar(&options.ShowStatistics, "stats", false, "display scan statistic"),
 		flagSet.StringVar(&options.Memprofile, "profile-mem", "", "optional httpx memory profile dump file"),
 		flagSet.BoolVar(&options.Silent, "silent", false, "silent mode"),
 		flagSet.BoolVarP(&options.Verbose, "verbose", "v", false, "verbose mode"),
-		flagSet.IntVarP(&options.StatsInterval, "stats-interval", "si", 0, "number of seconds to wait between showing a statistics update (default: 5)"),
 		flagSet.BoolVarP(&options.NoColor, "no-color", "nc", false, "disable colors in cli output"),
 	)
 
@@ -427,17 +418,6 @@ func ParseOptions() *Options {
 	)
 
 	_ = flagSet.Parse()
-
-	if options.ListOutputFields {
-		fields, err := structs.GetStructFields(Result{})
-		if err != nil {
-			gologger.Fatal().Msgf("Could not get struct fields: %s\n", err)
-		}
-		for _, field := range fields {
-			fmt.Println(field)
-		}
-		os.Exit(0)
-	}
 
 	if options.OutputAll && options.Output == "" {
 		gologger.Fatal().Msg("Please specify an output file using -o/-output when using -oa/-output-all")
@@ -458,10 +438,6 @@ func ParseOptions() *Options {
 		}
 	}
 
-	if options.StatsInterval != 0 {
-		options.ShowStatistics = true
-	}
-
 	if options.ResponseBodyPreviewSize > 0 && options.StripFilter == "" {
 		options.StripFilter = "html"
 	}
@@ -472,16 +448,6 @@ func ParseOptions() *Options {
 	err := options.configureResume()
 	if err != nil {
 		gologger.Fatal().Msgf("%s\n", err)
-	}
-	if options.ListDSLVariable {
-		dslVars, err := dslVariables()
-		if err != nil {
-			gologger.Fatal().Msgf("%s\n", err)
-		}
-		for _, dsl := range dslVars {
-			gologger.Print().Msg(dsl)
-		}
-		os.Exit(0)
 	}
 	showBanner()
 

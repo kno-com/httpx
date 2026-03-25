@@ -40,7 +40,6 @@ import (
 	"github.com/logrusorgru/aurora"
 	"github.com/pkg/errors"
 
-	"github.com/projectdiscovery/clistats"
 	"github.com/projectdiscovery/goconfig"
 	"github.com/projectdiscovery/httpx/common/hashes"
 	"github.com/projectdiscovery/retryablehttp-go"
@@ -78,7 +77,6 @@ type Runner struct {
 	scanopts           ScanOptions
 	hm                 *hybrid.HybridMap
 	excludeCdn         bool
-	stats              clistats.StatisticsClient
 	ratelimiter        ratelimit.Limiter
 	HostErrorsCache    gcache.Cache[string, int]
 	ditClassifier *dit.Classifier
@@ -321,16 +319,6 @@ func New(options *Options) (*Runner, error) {
 	scanopts.Hashes = options.Hashes
 	runner.scanopts = scanopts
 
-	if options.ShowStatistics {
-		runner.stats, err = clistats.New()
-		if err != nil {
-			return nil, err
-		}
-		if options.StatsInterval == 0 {
-			options.StatsInterval = 5
-		}
-	}
-
 	hm, err := hybrid.New(hybrid.DefaultDiskOptions)
 	if err != nil {
 		return nil, err
@@ -508,25 +496,7 @@ func (r *Runner) prepareInput() {
 	if len(r.options.requestURIs) > 0 {
 		numHosts *= len(r.options.requestURIs)
 	}
-
-	if r.options.ShowStatistics {
-		r.stats.AddStatic("totalHosts", numHosts)
-		r.stats.AddCounter("hosts", 0)
-		r.stats.AddStatic("startedAt", time.Now())
-		r.stats.AddCounter("requests", 0)
-		r.stats.AddDynamic("summary", makePrintCallback())
-		err := r.stats.Start()
-		if err != nil {
-			gologger.Warning().Msgf("Could not create statistics: %s\n", err)
-		}
-
-		r.stats.GetStatResponse(time.Duration(r.options.StatsInterval)*time.Second, func(s string, err error) error {
-			if err != nil && r.options.Verbose {
-				gologger.Error().Msgf("Could not read statistics: %s\n", err)
-			}
-			return nil
-		})
-	}
+	_ = numHosts // kept for potential future use
 }
 
 func (r *Runner) setSeen(k string) {
@@ -743,55 +713,6 @@ func (r *Runner) countTargetFromRawTarget(rawTarget string) (numTargets int, err
 	return expandedTarget, nil
 }
 
-var (
-	lastRequestsCount float64
-)
-
-func makePrintCallback() func(stats clistats.StatisticsClient) interface{} {
-	builder := &strings.Builder{}
-	return func(stats clistats.StatisticsClient) interface{} {
-		startedAt, _ := stats.GetStatic("startedAt")
-		duration := time.Since(startedAt.(time.Time))
-
-		builder.WriteRune('[')
-		builder.WriteString(clistats.FmtDuration(duration))
-		builder.WriteRune(']')
-
-		var currentRequests float64
-		if reqs, _ := stats.GetCounter("requests"); reqs > 0 {
-			currentRequests = float64(reqs)
-		}
-
-		builder.WriteString(" | RPS: ")
-		incrementRequests := currentRequests - lastRequestsCount
-		builder.WriteString(clistats.String(uint64(incrementRequests / duration.Seconds())))
-
-		builder.WriteString(" | Requests: ")
-		_, _ = fmt.Fprintf(builder, "%.0f", currentRequests)
-
-		hosts, _ := stats.GetCounter("hosts")
-		totalHosts, _ := stats.GetStatic("totalHosts")
-
-		builder.WriteString(" | Hosts: ")
-		builder.WriteString(clistats.String(hosts))
-		builder.WriteRune('/')
-		builder.WriteString(clistats.String(totalHosts))
-		builder.WriteRune(' ')
-		builder.WriteRune('(')
-		builder.WriteString(clistats.String(uint64(float64(hosts) / float64(totalHosts.(int)) * 100.0)))
-		builder.WriteRune('%')
-		builder.WriteRune(')')
-
-		builder.WriteRune('\n')
-		statString := builder.String()
-		fmt.Fprintf(os.Stderr, "%s", statString)
-		builder.Reset()
-
-		lastRequestsCount = currentRequests
-		return statString
-	}
-}
-
 // Close closes the httpx scan instance
 func (r *Runner) Close() {
 	// nolint:errcheck // ignore
@@ -801,9 +722,6 @@ func (r *Runner) Close() {
 
 	if r.options.HostMaxErrors >= 0 {
 		r.HostErrorsCache.Purge()
-	}
-	if r.options.ShowStatistics {
-		_ = r.stats.Stop()
 	}
 	if r.options.OnClose != nil {
 		r.options.OnClose()
@@ -1391,9 +1309,6 @@ func (r *Runner) process(t string, wg *syncutil.AdaptiveWaitGroup, hp *httpx.HTT
 				}
 			}
 		}
-		if r.options.ShowStatistics {
-			r.stats.IncrementCounter("hosts", 1)
-		}
 	}
 }
 
@@ -1544,9 +1459,6 @@ retry:
 		req.Header.Add("Connection", "close")
 	}
 	resp, err := hp.Do(req, httpx.UnsafeOptions{URIPath: reqURI})
-	if r.options.ShowStatistics {
-		r.stats.IncrementCounter("requests", 1)
-	}
 	var requestDump []byte
 	if scanopts.Unsafe {
 		var errDump error
@@ -1796,9 +1708,6 @@ retry:
 		http2 = hp.SupportHTTP2(protocol, method, URL.String())
 		if http2 {
 			builder.WriteString(" [http2]")
-		}
-		if r.options.ShowStatistics {
-			r.stats.IncrementCounter("requests", 1)
 		}
 	}
 
