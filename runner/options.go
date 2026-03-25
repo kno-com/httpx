@@ -29,7 +29,6 @@ import (
 	sliceutil "github.com/projectdiscovery/utils/slice"
 	stringsutil "github.com/projectdiscovery/utils/strings"
 	"github.com/projectdiscovery/utils/structs"
-	updateutils "github.com/projectdiscovery/utils/update"
 	wappalyzer "github.com/projectdiscovery/wappalyzergo"
 )
 
@@ -311,7 +310,6 @@ type Options struct {
 	ExcludeOutputFields       goflags.StringSlice
 	//The OnResult callback function is invoked for each result. It is important to check for errors in the result before using Result.Err.
 	OnResult             OnResultCallback
-	DisableUpdateCheck   bool
 	NoDecode             bool
 	Screenshot           bool
 	UseInstalledChrome   bool
@@ -460,11 +458,6 @@ func ParseOptions() *Options {
 		flagSet.BoolVar(&options.HTTP2Probe, "http2", false, "probe and display server supporting HTTP2"),
 		flagSet.BoolVar(&options.VHost, "vhost", false, "probe and display server supporting VHOST"),
 		flagSet.BoolVarP(&options.ListDSLVariable, "list-dsl-variables", "ldv", false, "list json output field keys name that support dsl matcher/filter"),
-	)
-
-	flagSet.CreateGroup("update", "Update",
-		flagSet.CallbackVarP(GetUpdateCallback(), "update", "up", "update httpx to latest version"),
-		flagSet.BoolVarP(&options.DisableUpdateCheck, "disable-update-check", "duc", false, "disable automatic httpx update check"),
 	)
 
 	flagSet.CreateGroup("output", "Output",
@@ -616,17 +609,6 @@ func ParseOptions() *Options {
 	if options.Version {
 		gologger.Info().Msgf("Current Version: %s\n", Version)
 		os.Exit(0)
-	}
-
-	if !options.DisableUpdateCheck {
-		latestVersion, err := updateutils.GetToolVersionCallback("httpx", Version)()
-		if err != nil {
-			if options.Verbose {
-				gologger.Error().Msgf("httpx version check failed: %v", err.Error())
-			}
-		} else {
-			gologger.Info().Msgf("Current httpx version %v %v", Version, updateutils.GetVersionDescription(Version, latestVersion))
-		}
 	}
 
 	if err := options.ValidateOptions(); err != nil {
