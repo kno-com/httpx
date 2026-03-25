@@ -6,18 +6,16 @@ require (
 	github.com/Mzack9999/gcache v0.0.0-20230410081825-519e28eab057
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/akrylysov/pogreb v0.10.2 // indirect
-	github.com/go-faker/faker/v4 v4.7.0
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/hdm/jarm-go v0.0.7 // indirect
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/logrusorgru/aurora v2.0.3+incompatible
 	github.com/mfonda/simhash v0.0.0-20151007195837-79f94a1100d6
-	github.com/microcosm-cc/bluemonday v1.0.27
+	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/miekg/dns v1.1.68 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/projectdiscovery/asnmap v1.1.1 // indirect
 	github.com/projectdiscovery/cdncheck v1.2.28
-	github.com/projectdiscovery/clistats v0.1.1
 	github.com/projectdiscovery/dsl v0.8.14
 	github.com/projectdiscovery/fastdialer v0.5.5
 	github.com/projectdiscovery/fdmax v0.0.4
@@ -28,7 +26,6 @@ require (
 	github.com/projectdiscovery/mapcidr v1.1.97
 	github.com/projectdiscovery/networkpolicy v0.1.35
 	github.com/projectdiscovery/ratelimit v0.0.84
-	github.com/projectdiscovery/rawhttp v0.1.90
 	github.com/projectdiscovery/retryablehttp-go v1.3.6
 	github.com/projectdiscovery/useragent v0.0.107
 	github.com/projectdiscovery/utils v0.10.0
@@ -119,7 +116,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/projectdiscovery/blackrock v0.0.1 // indirect
-	github.com/projectdiscovery/freeport v0.0.7 // indirect
 	github.com/projectdiscovery/gostruct v0.0.2 // indirect
 	github.com/projectdiscovery/machineid v0.0.0-20250715113114-c77eb3567582 // indirect
 	github.com/projectdiscovery/retryabledns v1.0.113 // indirect

@@ -13,10 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/microcosm-cc/bluemonday"
 	"github.com/projectdiscovery/cdncheck"
 	"github.com/projectdiscovery/fastdialer/fastdialer"
-	"github.com/projectdiscovery/httpx/common/httputilz"
 	"github.com/projectdiscovery/networkpolicy"
 	retryablehttp "github.com/projectdiscovery/retryablehttp-go"
 	"github.com/projectdiscovery/useragent"
@@ -33,7 +31,6 @@ type HTTPX struct {
 	client2       *http.Client
 	Filters       []Filter
 	Options       *Options
-	htmlPolicy    *bluemonday.Policy
 	CustomHeaders map[string]string
 	cdn           *cdncheck.Client
 	Dialer        *fastdialer.Dialer
@@ -187,7 +184,6 @@ func New(options *Options) (*HTTPX, error) {
 		Timeout:   httpx.Options.Timeout,
 	}
 
-	httpx.htmlPolicy = bluemonday.NewPolicy()
 	httpx.CustomHeaders = httpx.Options.CustomHeaders
 
 	if options.CDNCheckClient != nil {
@@ -399,13 +395,3 @@ func (httpx *HTTPX) setCustomCookies(req *http.Request) {
 	}
 }
 
-func (httpx *HTTPX) Sanitize(respStr string, trimLine, normalizeSpaces bool) string {
-	respStr = httpx.htmlPolicy.Sanitize(respStr)
-	if trimLine {
-		respStr = strings.ReplaceAll(respStr, "\n", "")
-	}
-	if normalizeSpaces {
-		respStr = httputilz.NormalizeSpaces(respStr)
-	}
-	return respStr
-}

@@ -238,7 +238,6 @@ type Options struct {
 	OutputFilterResponseTime  string
 	OutputFilterCondition     string
 	OutputMatchCondition      string
-	StripFilter               string
 	ExcludeOutputFields       goflags.StringSlice
 	//The OnResult callback function is invoked for each result. It is important to check for errors in the result before using Result.Err.
 	OnResult             OnResultCallback
@@ -323,7 +322,6 @@ func ParseOptions() *Options {
 		flagSet.StringSliceVarP(&options.OutputFilterCdn, "filter-cdn", "fcdn", nil, fmt.Sprintf("filter host with specified cdn provider (%s)", cdncheck.DefaultCDNProviders), goflags.NormalizedStringSliceOptions),
 		flagSet.StringVarP(&options.OutputFilterResponseTime, "filter-response-time", "frt", "", "filter response with specified response time in seconds (-frt '> 1')"),
 		flagSet.StringVarP(&options.OutputFilterCondition, "filter-condition", "fdc", "", "filter response with dsl expression condition"),
-		flagSet.DynamicVar(&options.StripFilter, "strip", "html", "strips all tags in response. supported formats: html,xml"),
 		flagSet.StringSliceVarP(&options.ExcludeOutputFields, "exclude-output-fields", "eof", nil, "exclude output fields output based on a condition", goflags.NormalizedOriginalStringSliceOptions),
 	)
 
@@ -403,10 +401,6 @@ func ParseOptions() *Options {
 		if err := flagSet.MergeConfigFile(cfgFile); err != nil {
 			gologger.Fatal().Msgf("Could not read config: %s\n", err)
 		}
-	}
-
-	if options.ResponseBodyPreviewSize > 0 && options.StripFilter == "" {
-		options.StripFilter = "html"
 	}
 
 	// Read the inputs and configure the logging
