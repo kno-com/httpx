@@ -8,7 +8,6 @@ require (
 	github.com/akrylysov/pogreb v0.10.2 // indirect
 	github.com/go-faker/faker/v4 v4.7.0
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/hbakhtiyor/strsim v0.0.0-20190107154042-4d2bbb273edf
 	github.com/hdm/jarm-go v0.0.7 // indirect
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/logrusorgru/aurora v2.0.3+incompatible
@@ -16,7 +15,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/miekg/dns v1.1.68 // indirect
 	github.com/pkg/errors v0.9.1
-	github.com/projectdiscovery/asnmap v1.1.1
+	github.com/projectdiscovery/asnmap v1.1.1 // indirect
 	github.com/projectdiscovery/cdncheck v1.2.28
 	github.com/projectdiscovery/clistats v0.1.1
 	github.com/projectdiscovery/dsl v0.8.14
@@ -34,7 +33,6 @@ require (
 	github.com/projectdiscovery/useragent v0.0.107
 	github.com/projectdiscovery/utils v0.10.0
 	github.com/projectdiscovery/wappalyzergo v0.2.73
-	github.com/rs/xid v1.6.0
 	github.com/spaolacci/murmur3 v1.1.0
 	github.com/stretchr/testify v1.11.1
 	github.com/zmap/zcrypto v0.0.0-20240803002437-3a861682ac77 // indirect
@@ -51,11 +49,8 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1
 	github.com/happyhackingspace/dit v0.0.14
-	github.com/projectdiscovery/awesome-search-queries v0.0.0-20260104120501-961ef30f7193
 	github.com/refraction-networking/utls v1.8.2
 	github.com/seh-msft/burpxml v1.0.1
-	github.com/weppos/publicsuffix-go v0.50.3
-	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -149,6 +144,7 @@ require (
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	github.com/vulncheck-oss/go-exploit v1.51.0 // indirect
+	github.com/weppos/publicsuffix-go v0.50.3 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/yuin/goldmark v1.7.13 // indirect
 	github.com/yuin/goldmark-emoji v1.0.3 // indirect
@@ -164,4 +160,5 @@ require (
 	golang.org/x/time v0.14.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
