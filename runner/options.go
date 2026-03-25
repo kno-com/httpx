@@ -3,7 +3,6 @@ package runner
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -26,8 +25,6 @@ import (
 	"github.com/projectdiscovery/httpx/common/inputformats"
 	"github.com/projectdiscovery/httpx/common/stringz"
 	"github.com/projectdiscovery/networkpolicy"
-	pdcpauth "github.com/projectdiscovery/utils/auth/pdcp"
-	"github.com/projectdiscovery/utils/env"
 	fileutil "github.com/projectdiscovery/utils/file"
 	sliceutil "github.com/projectdiscovery/utils/slice"
 	stringsutil "github.com/projectdiscovery/utils/strings"
@@ -41,11 +38,6 @@ const (
 	defaultThreads         = 50
 	DefaultResumeFile      = "resume.cfg"
 	DefaultOutputDirectory = "output"
-)
-
-var (
-	PDCPApiKey = ""
-	TeamIDEnv  = env.GetEnvOrDefault("PDCP_TEAM_ID", "")
 )
 
 // OnResultCallback (hostResult)
@@ -231,8 +223,6 @@ type Options struct {
 	MarkDownOutput            bool
 	CSVOutput                 bool
 	CSVOutputEncoding         string
-	PdcpAuth                  string
-	PdcpAuthCredFile          string
 	Silent                    bool
 	Version                   bool
 	Verbose                   bool
@@ -340,15 +330,6 @@ type Options struct {
 
 	JavascriptCodes goflags.StringSlice
 
-	// AssetUpload
-	AssetUpload bool
-	// AssetName
-	AssetName string
-	// AssetID
-	AssetID string
-	// AssetFileUpload
-	AssetFileUpload string
-	TeamID          string
 	// SecretFile is the path to the secret file for authentication
 	SecretFile string
 	// OnClose adds a callback function that is invoked when httpx is closed
@@ -568,16 +549,6 @@ func ParseOptions() *Options {
 		flagSet.IntVarP(&options.MaxResponseBodySizeToRead, "response-size-to-read", "rstr", int(httpxcommon.DefaultMaxResponseBodySize), "max response size to read in bytes"),
 	)
 
-	flagSet.CreateGroup("cloud", "Cloud",
-		flagSet.DynamicVar(&options.PdcpAuth, "auth", "true", "configure projectdiscovery cloud (pdcp) api key"),
-		flagSet.StringVarP(&options.PdcpAuthCredFile, "auth-config", "ac", "", "configure projectdiscovery cloud (pdcp) api key credential file"),
-		flagSet.BoolVarP(&options.AssetUpload, "dashboard", "pd", false, "upload / view output in projectdiscovery cloud (pdcp) UI dashboard"),
-		flagSet.StringVarP(&options.TeamID, "team-id", "tid", TeamIDEnv, "upload asset results to given team id (optional)"),
-		flagSet.StringVarP(&options.AssetID, "asset-id", "aid", "", "upload new assets to existing asset id (optional)"),
-		flagSet.StringVarP(&options.AssetName, "asset-name", "aname", "", "assets group name to set (optional)"),
-		flagSet.StringVarP(&options.AssetFileUpload, "dashboard-upload", "pdu", "", "upload httpx output file (jsonl) in projectdiscovery cloud (pdcp) UI dashboard"),
-	)
-
 	_ = flagSet.Parse()
 
 	if options.ListOutputFields {
@@ -607,25 +578,6 @@ func ParseOptions() *Options {
 		// merge config file with flags
 		if err := flagSet.MergeConfigFile(cfgFile); err != nil {
 			gologger.Fatal().Msgf("Could not read config: %s\n", err)
-		}
-	}
-
-	if options.PdcpAuthCredFile != "" {
-		pdcpauth.PDCPCredFile = options.PdcpAuthCredFile
-		pdcpauth.PDCPDir = filepath.Dir(pdcpauth.PDCPCredFile)
-	}
-
-	// api key hierarchy: cli flag > env var > .pdcp/credential file
-	if options.PdcpAuth == "true" {
-		AuthWithPDCP()
-	} else if len(options.PdcpAuth) == 36 {
-		PDCPApiKey = options.PdcpAuth
-		ph := pdcpauth.PDCPCredHandler{}
-		if _, err := ph.GetCreds(); err == pdcpauth.ErrNoCreds {
-			apiServer := env.GetEnvOrDefault("PDCP_API_SERVER", pdcpauth.DefaultApiServer)
-			if validatedCreds, err := ph.ValidateAPIKey(PDCPApiKey, apiServer, "httpx"); err == nil {
-				_ = ph.SaveCreds(validatedCreds)
-			}
 		}
 	}
 

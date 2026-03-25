@@ -146,7 +146,7 @@ func New(options *Options) (*Runner, error) {
 	var err error
 	if options.Wappalyzer != nil {
 		runner.wappalyzer = options.Wappalyzer
-	} else if options.TechDetect || options.JSONOutput || options.CSVOutput || options.AssetUpload {
+	} else if options.TechDetect || options.JSONOutput || options.CSVOutput {
 		runner.wappalyzer, err = func() (*wappalyzer.Wappalyze, error) {
 			if options.CustomFingerprintFile != "" {
 				return wappalyzer.NewFromFile(options.CustomFingerprintFile, true, true)
@@ -331,7 +331,7 @@ func New(options *Options) (*Runner, error) {
 	scanopts.OutputResponseTime = options.OutputResponseTime
 	scanopts.NoFallback = options.NoFallback
 	scanopts.NoFallbackScheme = options.NoFallbackScheme
-	scanopts.TechDetect = options.TechDetect || options.JSONOutput || options.CSVOutput || options.AssetUpload
+	scanopts.TechDetect = options.TechDetect || options.JSONOutput || options.CSVOutput
 	scanopts.CPEDetect = options.CPEDetect || options.JSONOutput || options.CSVOutput
 	scanopts.WordPress = options.WordPress || options.JSONOutput || options.CSVOutput
 	scanopts.StoreChain = options.StoreChain
