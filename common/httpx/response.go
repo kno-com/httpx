@@ -22,7 +22,6 @@ type Response struct {
 	CSPData       *CSPData
 	BodyDomains   *BodyDomain
 	HTTP2         bool
-	Pipeline      bool
 	Duration      time.Duration
 	Chain         []httputil.ChainItem
 }

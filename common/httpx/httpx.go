@@ -283,11 +283,6 @@ get_response:
 
 	respbodystr := string(respbody)
 
-	// check if we need to strip html
-	if h.Options.VHostStripHTML {
-		respbodystr = h.htmlPolicy.Sanitize(respbodystr)
-	}
-
 	// if content length is not defined
 	if resp.ContentLength <= 0 {
 		// check if it's in the header and convert to int

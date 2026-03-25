@@ -67,11 +67,9 @@ type Result struct {
 	StatusCode         int                           `json:"status_code" csv:"status_code" md:"status_code" mapstructure:"status_code"`
 	ContentLength      int                           `json:"content_length" csv:"content_length" md:"content_length" mapstructure:"content_length"`
 	Failed             bool                          `json:"failed" csv:"failed" md:"failed" mapstructure:"failed"`
-	VHost              bool                          `json:"vhost,omitempty" csv:"vhost" md:"vhost" mapstructure:"vhost"`
 	WebSocket          bool                          `json:"websocket,omitempty" csv:"websocket" md:"websocket" mapstructure:"websocket"`
 	CDN                bool                          `json:"cdn,omitempty" csv:"cdn" md:"cdn" mapstructure:"cdn"`
 	HTTP2              bool                          `json:"http2,omitempty" csv:"http2" md:"http2" mapstructure:"http2"`
-	Pipeline           bool                          `json:"pipeline,omitempty" csv:"pipeline" md:"pipeline" mapstructure:"pipeline"`
 	StoredResponsePath string                        `json:"stored_response_path,omitempty" csv:"stored_response_path" md:"stored_response_path" mapstructure:"stored_response_path"`
 	KnowledgeBase      map[string]interface{}        `json:"knowledgebase,omitempty" csv:"-" md:"-" mapstructure:"knowledgebase"`
 	Resolvers          []string                      `json:"resolvers,omitempty" csv:"resolvers" md:"resolvers" mapstructure:"resolvers"`

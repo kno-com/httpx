@@ -258,7 +258,6 @@ func New(options *Options) (*Runner, error) {
 		scanopts.Methods = append(scanopts.Methods, http.MethodGet)
 	}
 	runner.options.protocol = httpx.HTTPorHTTPS
-	scanopts.VHost = options.VHost
 	scanopts.OutputTitle = options.ExtractTitle
 	scanopts.OutputStatusCode = options.StatusCode
 	scanopts.OutputLocation = options.Location
@@ -276,11 +275,9 @@ func New(options *Options) (*Runner, error) {
 	if options.RequestURI != "" {
 		scanopts.RequestURI = options.RequestURI
 	}
-	scanopts.VHostInput = options.VHostInput
 	scanopts.OutputContentType = options.OutputContentType
 	scanopts.RequestBody = options.RequestBody
 	scanopts.Unsafe = options.Unsafe
-	scanopts.Pipeline = options.Pipeline
 	scanopts.HTTP2Probe = options.HTTP2Probe
 	scanopts.OutputMethod = options.OutputMethod
 	scanopts.OutputIP = options.OutputIP
@@ -1587,9 +1584,6 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 	}
 	retried := false
 retry:
-	if scanopts.VHostInput && target.CustomHost == "" {
-		return Result{Input: origInput}
-	}
 	URL, err := r.parseURL(target.Host)
 	if err != nil {
 		return Result{URL: target.Host, Input: origInput, Err: err}
@@ -1942,33 +1936,10 @@ retry:
 		rawResponseHeaders = stringz.Base64([]byte(resp.RawHeaders))
 	}
 
-	// check for virtual host
-	isvhost := false
-	if scanopts.VHost {
-		r.ratelimiter.Take()
-		isvhost, _ = hp.IsVirtualHost(req, httpx.UnsafeOptions{})
-		if isvhost {
-			builder.WriteString(" [vhost]")
-		}
-	}
-
 	// web socket
 	isWebSocket := isWebSocket(resp)
 	if scanopts.OutputWebSocket && isWebSocket {
 		builder.WriteString(" [websocket]")
-	}
-
-	pipeline := false
-	if scanopts.Pipeline {
-		port, _ := strconv.Atoi(URL.Port())
-		r.ratelimiter.Take()
-		pipeline = hp.SupportPipeline(protocol, method, URL.Host, port)
-		if pipeline {
-			builder.WriteString(" [pipeline]")
-		}
-		if r.options.ShowStatistics {
-			r.stats.IncrementCounter("requests", 1)
-		}
 	}
 
 	var http2 bool
@@ -2291,13 +2262,11 @@ retry:
 		ContentType:      resp.GetHeaderPart("Content-Type", ";"),
 		Title:            title,
 		str:              builder.String(),
-		VHost:            isvhost,
 		WebServer:        serverHeader,
 		ResponseBody:     serverResponseRaw,
 		BodyPreview:      bodyPreview,
 		WebSocket:        isWebSocket,
 		CSPData:          resp.CSPData,
-		Pipeline:         pipeline,
 		HTTP2:            http2,
 		Method:           method,
 		Host:             parsed.Hostname(),

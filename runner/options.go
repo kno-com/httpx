@@ -47,7 +47,6 @@ type ScanOptions struct {
 	StoreResponseDirectory    string
 	RequestURI                string
 	RequestBody               string
-	VHost                     bool
 	OutputTitle               bool
 	OutputStatusCode          bool
 	OutputLocation            bool
@@ -63,10 +62,8 @@ type ScanOptions struct {
 	Base64ResponseInStdout    bool
 	ChainInStdout             bool
 	CSPProbe                  bool
-	VHostInput                bool
 	OutputContentType         bool
 	Unsafe                    bool
-	Pipeline                  bool
 	HTTP2Probe                bool
 	OutputIP                  bool
 	OutputCName               bool
@@ -98,7 +95,6 @@ func (s *ScanOptions) Clone() *ScanOptions {
 		StoreResponseDirectory:    s.StoreResponseDirectory,
 		RequestURI:                s.RequestURI,
 		RequestBody:               s.RequestBody,
-		VHost:                     s.VHost,
 		OutputTitle:               s.OutputTitle,
 		OutputStatusCode:          s.OutputStatusCode,
 		OutputLocation:            s.OutputLocation,
@@ -116,7 +112,6 @@ func (s *ScanOptions) Clone() *ScanOptions {
 		CSPProbe:                  s.CSPProbe,
 		OutputContentType:         s.OutputContentType,
 		Unsafe:                    s.Unsafe,
-		Pipeline:                  s.Pipeline,
 		HTTP2Probe:                s.HTTP2Probe,
 		OutputIP:                  s.OutputIP,
 		OutputCName:               s.OutputCName,
@@ -185,8 +180,6 @@ type Options struct {
 	Delay                     time.Duration
 	filterRegexes             []*regexp.Regexp
 	matchRegexes              []*regexp.Regexp
-	VHost                     bool
-	VHostInput                bool
 	Smuggling                 bool
 	ExtractTitle              bool
 	StatusCode                bool
@@ -221,7 +214,6 @@ type Options struct {
 	Debug                     bool
 	DebugRequests             bool
 	DebugResponse             bool
-	Pipeline                  bool
 	HTTP2Probe                bool
 	OutputCDN                 string
 	OutputResponseTime        bool
@@ -389,9 +381,7 @@ func ParseOptions() *Options {
 		flagSet.VarP(&options.CustomPorts, "ports", "p", "ports to probe (nmap syntax: eg http:1,2-10,11,https:80)"),
 		flagSet.StringVar(&options.RequestURIs, "path", "", "path or list of paths to probe (comma-separated, file)"),
 		flagSet.BoolVar(&options.CSPProbe, "csp-probe", false, "send http probes on the extracted CSP domains"),
-		flagSet.BoolVar(&options.Pipeline, "pipeline", false, "probe and display server supporting HTTP1.1 pipeline"),
 		flagSet.BoolVar(&options.HTTP2Probe, "http2", false, "probe and display server supporting HTTP2"),
-		flagSet.BoolVar(&options.VHost, "vhost", false, "probe and display server supporting VHOST"),
 		flagSet.BoolVarP(&options.ListDSLVariable, "list-dsl-variables", "ldv", false, "list json output field keys name that support dsl matcher/filter"),
 	)
 
@@ -429,7 +419,6 @@ func ParseOptions() *Options {
 		flagSet.IntVarP(&options.MaxRedirects, "max-redirects", "maxr", 10, "max number of redirects to follow per host"),
 		flagSet.BoolVarP(&options.FollowHostRedirects, "follow-host-redirects", "fhr", false, "follow redirects on the same host"),
 		flagSet.BoolVarP(&options.RespectHSTS, "respect-hsts", "rhsts", false, "respect HSTS response headers for redirect requests"),
-		flagSet.BoolVar(&options.VHostInput, "vhost-input", false, "get a list of vhosts as input"),
 		flagSet.StringVar(&options.Methods, "x", "", "request methods to probe, use 'all' to probe all HTTP methods"),
 		flagSet.StringVar(&options.RequestBody, "body", "", "post body to include in http request"),
 		flagSet.BoolVarP(&options.Stream, "stream", "s", false, "stream mode - start elaborating input targets without sorting"),

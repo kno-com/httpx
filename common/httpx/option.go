@@ -37,19 +37,11 @@ type Options struct {
 	// RetryMax is the maximum number of retries
 	RetryMax      int
 	CustomHeaders map[string]string
-	// VHostSimilarityRatio 1 - 100
-	VHostSimilarityRatio int
 	FollowRedirects      bool
 	FollowHostRedirects  bool
 	RespectHSTS          bool
 	MaxRedirects         int
 	Unsafe               bool
-	// VHOSTs options
-	VHostIgnoreStatusCode     bool
-	VHostIgnoreContentLength  bool
-	VHostIgnoreNumberOfWords  bool
-	VHostIgnoreNumberOfLines  bool
-	VHostStripHTML            bool
 	MaxResponseBodySizeToSave int64
 	MaxResponseBodySizeToRead int64
 	UnsafeURI                 string
@@ -72,13 +64,6 @@ var DefaultOptions = Options{
 	CdnCheck:                  "true",
 	ExcludeCdn:                false,
 	MaxResponseBodySizeToRead: DefaultMaxResponseBodySize,
-	// VHOSTs options
-	VHostIgnoreStatusCode:    false,
-	VHostIgnoreContentLength: true,
-	VHostIgnoreNumberOfWords: false,
-	VHostIgnoreNumberOfLines: false,
-	VHostStripHTML:           false,
-	VHostSimilarityRatio:     85,
 	DefaultUserAgent:         "httpx - Open-source project (github.com/projectdiscovery/httpx)",
 }
 
