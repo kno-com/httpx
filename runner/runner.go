@@ -27,7 +27,6 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocarina/gocsv"
-	asnmap "github.com/projectdiscovery/asnmap/libs"
 	"github.com/projectdiscovery/fastdialer/fastdialer"
 	"github.com/projectdiscovery/httpx/common/customextract"
 	"github.com/projectdiscovery/httpx/common/dedup"
@@ -2000,31 +1999,6 @@ retry:
 		}
 	}
 
-	var asnResponse *AsnResponse
-	if r.options.Asn {
-		results, _ := asnmap.DefaultClient.GetData(ip)
-		if len(results) > 0 {
-			var cidrs []string
-			ipnets, _ := asnmap.GetCIDR(results)
-			for _, ipnet := range ipnets {
-				cidrs = append(cidrs, ipnet.String())
-			}
-			asnResponse = &AsnResponse{
-				AsNumber:  fmt.Sprintf("AS%v", results[0].ASN),
-				AsName:    results[0].Org,
-				AsCountry: results[0].Country,
-				AsRange:   cidrs,
-			}
-			builder.WriteString(" [")
-			if !scanopts.OutputWithNoColor {
-				builder.WriteString(aurora.Magenta(asnResponse.String()).String())
-			} else {
-				builder.WriteString(asnResponse.String())
-			}
-			builder.WriteRune(']')
-		}
-	}
-
 	if scanopts.OutputIP || scanopts.ProbeAllIPS {
 		_, _ = fmt.Fprintf(builder, " [%s]", ip)
 	}
@@ -2345,7 +2319,6 @@ retry:
 		Extracts:         extractResult,
 		Lines:            resp.Lines,
 		Words:            resp.Words,
-		ASN:              asnResponse,
 		ExtractRegex:     extractRegex,
 		KnowledgeBase: r.classifyPage(respData, pHash),
 		TechnologyDetails: technologyDetails,

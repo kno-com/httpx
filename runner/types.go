@@ -19,21 +19,9 @@ import (
 	"github.com/projectdiscovery/httpx/common/httpx"
 )
 
-type AsnResponse struct {
-	AsNumber  string   `json:"as_number" csv:"as_number"`
-	AsName    string   `json:"as_name" csv:"as_name"`
-	AsCountry string   `json:"as_country" csv:"as_country"`
-	AsRange   []string `json:"as_range" csv:"as_range"`
-}
-
-func (o AsnResponse) String() string {
-	return fmt.Sprintf("%v, %v, %v", o.AsNumber, o.AsName, o.AsCountry)
-}
-
 // Result of a scan
 type Result struct {
 	Timestamp          time.Time                     `json:"timestamp,omitempty" csv:"timestamp" md:"timestamp" mapstructure:"timestamp"`
-	ASN                *AsnResponse                  `json:"asn,omitempty" csv:"-" md:"-" mapstructure:"asn"`
 	Err                error                         `json:"-" csv:"-" md:"-" mapstructure:"-"`
 	CSPData            *httpx.CSPData                `json:"csp,omitempty" csv:"-" md:"-" mapstructure:"csp"`
 	Hashes             map[string]interface{}        `json:"hash,omitempty" csv:"-" md:"-" mapstructure:"hash"`

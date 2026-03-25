@@ -269,7 +269,6 @@ type Options struct {
 	filterWordsCount          []int
 	Hashes                    string
 	SimhashThreshold          int
-	Asn                       bool
 	OutputMatchCdn            goflags.StringSlice
 	OutputFilterCdn           goflags.StringSlice
 	OutputMatchResponseTime   string
@@ -338,7 +337,6 @@ func ParseOptions() *Options {
 		flagSet.BoolVar(&options.OutputIP, "ip", false, "display host ip"),
 		flagSet.BoolVar(&options.OutputCName, "cname", false, "display host cname"),
 		flagSet.BoolVarP(&options.ExtractFqdn, "efqdn", "extract-fqdn", false, "get domain and subdomains from response body and header in jsonl/csv output"),
-		flagSet.BoolVar(&options.Asn, "asn", false, "display host asn information"),
 		flagSet.DynamicVar(&options.OutputCDN, "cdn", "true", "display cdn/waf in use"),
 		flagSet.BoolVar(&options.Probe, "probe", false, "display probe status"),
 	)
