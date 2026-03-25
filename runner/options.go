@@ -204,8 +204,6 @@ type Options struct {
 	OutputCName               bool
 	Unsafe                    bool
 	Debug                     bool
-	DebugRequests             bool
-	DebugResponse             bool
 	HTTP2Probe                bool
 	OutputCDN                 string
 	OutputResponseTime        bool
@@ -271,8 +269,6 @@ type Options struct {
 	// OnClose adds a callback function that is invoked when httpx is closed
 	// to be exact at end of existing closures
 	OnClose func()
-
-	Trace bool
 
 	// Optional pre-created objects to reduce allocations
 	Wappalyzer     *wappalyzer.Wappalyze
@@ -409,8 +405,6 @@ func ParseOptions() *Options {
 
 	flagSet.CreateGroup("debug", "Debug",
 		flagSet.BoolVar(&options.Debug, "debug", false, "display request/response content in cli"),
-		flagSet.BoolVar(&options.DebugRequests, "debug-req", false, "display request content in cli"),
-		flagSet.BoolVar(&options.DebugResponse, "debug-resp", false, "display response content in cli"),
 		flagSet.BoolVar(&options.Version, "version", false, "display httpx version"),
 		flagSet.BoolVar(&options.ShowStatistics, "stats", false, "display scan statistic"),
 		flagSet.StringVar(&options.Memprofile, "profile-mem", "", "optional httpx memory profile dump file"),
@@ -418,7 +412,6 @@ func ParseOptions() *Options {
 		flagSet.BoolVarP(&options.Verbose, "verbose", "v", false, "verbose mode"),
 		flagSet.IntVarP(&options.StatsInterval, "stats-interval", "si", 0, "number of seconds to wait between showing a statistics update (default: 5)"),
 		flagSet.BoolVarP(&options.NoColor, "no-color", "nc", false, "disable colors in cli output"),
-		flagSet.BoolVarP(&options.Trace, "trace", "tr", false, "trace"),
 	)
 
 	flagSet.CreateGroup("Optimizations", "Optimizations",
@@ -688,10 +681,8 @@ func (options *Options) ShouldSaveResume() bool {
 func flagsIncompatibleWithSilent(options *Options) []string {
 	var incompatibleFlagsList []string
 	for k, v := range map[string]bool{
-		"debug":          options.Debug,
-		"debug-request":  options.DebugRequests,
-		"debug-response": options.DebugResponse,
-		"verbose":        options.Verbose,
+		"debug":   options.Debug,
+		"verbose": options.Verbose,
 	} {
 		if v {
 			incompatibleFlagsList = append(incompatibleFlagsList, k)

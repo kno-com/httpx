@@ -136,7 +136,6 @@ func New(options *Options) (*Runner, error) {
 	}
 
 	httpxOptions := httpx.DefaultOptions
-	httpxOptions.Trace = options.Trace
 
 	var np *networkpolicy.NetworkPolicy
 	if options.Networkpolicy != nil {
@@ -1587,11 +1586,11 @@ retry:
 		fullURL = parsedURL.String()
 	}
 
-	if r.options.Debug || r.options.DebugRequests {
+	if r.options.Debug {
 		gologger.Info().Msgf("Dumped HTTP request for %s\n\n", fullURL)
 		gologger.Print().Msgf("%s", string(requestDump))
 	}
-	if (r.options.Debug || r.options.DebugResponse) && resp != nil {
+	if r.options.Debug && resp != nil {
 		gologger.Info().Msgf("Dumped HTTP response for %s\n\n", fullURL)
 		gologger.Print().Msgf("%s", string(resp.Raw))
 	}
@@ -2143,9 +2142,6 @@ retry:
 		Response:          resp,
 		FaviconData:       faviconData,
 		FileNameHash:      fileNameHash,
-	}
-	if r.options.Trace {
-		result.Trace = req.TraceInfo
 	}
 	return result
 }
