@@ -33,7 +33,6 @@ func (o AsnResponse) String() string {
 // Result of a scan
 type Result struct {
 	Timestamp          time.Time                     `json:"timestamp,omitempty" csv:"timestamp" md:"timestamp" mapstructure:"timestamp"`
-	LinkRequest        []NetworkRequest              `json:"link_request,omitempty" csv:"link_request" md:"link_request" mapstructure:"link_request"`
 	ASN                *AsnResponse                  `json:"asn,omitempty" csv:"-" md:"-" mapstructure:"asn"`
 	Err                error                         `json:"-" csv:"-" md:"-" mapstructure:"-"`
 	CSPData            *httpx.CSPData                `json:"csp,omitempty" csv:"-" md:"-" mapstructure:"csp"`
@@ -85,11 +84,7 @@ type Result struct {
 	CDN                bool                          `json:"cdn,omitempty" csv:"cdn" md:"cdn" mapstructure:"cdn"`
 	HTTP2              bool                          `json:"http2,omitempty" csv:"http2" md:"http2" mapstructure:"http2"`
 	Pipeline           bool                          `json:"pipeline,omitempty" csv:"pipeline" md:"pipeline" mapstructure:"pipeline"`
-	HeadlessBody       string                        `json:"headless_body,omitempty" csv:"headless_body" md:"headless_body" mapstructure:"headless_body"`
-	ScreenshotBytes    []byte                        `json:"screenshot_bytes,omitempty" csv:"screenshot_bytes" md:"screenshot_bytes" mapstructure:"screenshot_bytes"`
 	StoredResponsePath string                        `json:"stored_response_path,omitempty" csv:"stored_response_path" md:"stored_response_path" mapstructure:"stored_response_path"`
-	ScreenshotPath     string                        `json:"screenshot_path,omitempty" csv:"screenshot_path" md:"screenshot_path" mapstructure:"screenshot_path"`
-	ScreenshotPathRel  string                        `json:"screenshot_path_rel,omitempty" csv:"screenshot_path_rel" md:"screenshot_path_rel" mapstructure:"screenshot_path_rel"`
 	KnowledgeBase      map[string]interface{}        `json:"knowledgebase,omitempty" csv:"-" md:"-" mapstructure:"knowledgebase"`
 	Resolvers          []string                      `json:"resolvers,omitempty" csv:"resolvers" md:"resolvers" mapstructure:"resolvers"`
 	Fqdns              []string                      `json:"body_fqdn,omitempty" csv:"body_fqdn" md:"body_fqdn" mapstructure:"body_fqdn"`

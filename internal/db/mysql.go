@@ -131,18 +131,10 @@ func (m *mysqlDatabase) EnsureSchema(ctx context.Context) error {
 			chain JSON,
 			chain_status_codes JSON,
 
-			-- Headless/Screenshot
-			headless_body LONGTEXT,
-			screenshot_bytes LONGBLOB,
-			screenshot_path TEXT,
-			screenshot_path_rel TEXT,
 			stored_response_path TEXT,
 
 			-- Knowledge base
 			knowledgebase JSON,
-
-			-- Link requests
-			link_request JSON,
 
 			-- Trace
 			trace JSON,
@@ -188,8 +180,8 @@ func (m *mysqlDatabase) InsertBatch(ctx context.Context, results []runner.Result
 			failed, error, websocket, http2, pipeline, vhost,
 			words, `+"`lines`"+`, header, extracts, extract_regex,
 			chain, chain_status_codes,
-			headless_body, screenshot_bytes, screenshot_path, screenshot_path_rel, stored_response_path,
-			knowledgebase, link_request, trace
+			stored_response_path,
+			knowledgebase, trace
 		) VALUES (
 			?, ?, ?, ?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?, ?,
@@ -200,8 +192,8 @@ func (m *mysqlDatabase) InsertBatch(ctx context.Context, results []runner.Result
 			?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
 			?, ?,
-			?, ?, ?, ?, ?,
-			?, ?, ?
+			?,
+			?, ?
 		)`, tableName)
 
 	stmt, err := tx.PrepareContext(ctx, query)
@@ -229,7 +221,6 @@ func (m *mysqlDatabase) InsertBatch(ctx context.Context, results []runner.Result
 		chainJSON, _ := json.Marshal(r.Chain)
 		chainStatusJSON, _ := json.Marshal(r.ChainStatusCodes)
 		kbJSON, _ := json.Marshal(r.KnowledgeBase)
-		linkReqJSON, _ := json.Marshal(r.LinkRequest)
 		traceJSON, _ := json.Marshal(r.Trace)
 
 		_, err = stmt.ExecContext(ctx,
@@ -242,8 +233,8 @@ func (m *mysqlDatabase) InsertBatch(ctx context.Context, results []runner.Result
 			r.Failed, r.Error, r.WebSocket, r.HTTP2, r.Pipeline, r.VHost,
 			r.Words, r.Lines, headerJSON, extractsJSON, extractRegexJSON,
 			chainJSON, chainStatusJSON,
-			r.HeadlessBody, r.ScreenshotBytes, r.ScreenshotPath, r.ScreenshotPathRel, r.StoredResponsePath,
-			kbJSON, linkReqJSON, traceJSON,
+			r.StoredResponsePath,
+			kbJSON, traceJSON,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert result: %w", err)

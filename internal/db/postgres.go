@@ -132,18 +132,10 @@ func (p *postgresDatabase) EnsureSchema(ctx context.Context) error {
 			chain JSONB,
 			chain_status_codes INTEGER[],
 
-			-- Headless/Screenshot
-			headless_body TEXT,
-			screenshot_bytes BYTEA,
-			screenshot_path TEXT,
-			screenshot_path_rel TEXT,
 			stored_response_path TEXT,
 
 			-- Knowledge base
 			knowledgebase JSONB,
-
-			-- Link requests
-			link_request JSONB,
 
 			-- Trace
 			trace JSONB
@@ -196,8 +188,8 @@ func (p *postgresDatabase) InsertBatch(ctx context.Context, results []runner.Res
 			failed, error, websocket, http2, pipeline, vhost,
 			words, lines, header, extracts, extract_regex,
 			chain, chain_status_codes,
-			headless_body, screenshot_bytes, screenshot_path, screenshot_path_rel, stored_response_path,
-			knowledgebase, link_request, trace
+			stored_response_path,
+			knowledgebase, trace
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9,
 			$10, $11, $12, $13, $14, $15,
@@ -208,8 +200,8 @@ func (p *postgresDatabase) InsertBatch(ctx context.Context, results []runner.Res
 			$40, $41, $42, $43, $44, $45,
 			$46, $47, $48, $49, $50,
 			$51, $52,
-			$53, $54, $55, $56, $57,
-			$58, $59, $60
+			$53,
+			$54, $55
 		)`, tableName)
 
 	stmt, err := tx.PrepareContext(ctx, query)
@@ -228,7 +220,6 @@ func (p *postgresDatabase) InsertBatch(ctx context.Context, results []runner.Res
 		extractsJSON, _ := json.Marshal(r.Extracts)
 		chainJSON, _ := json.Marshal(r.Chain)
 		kbJSON, _ := json.Marshal(r.KnowledgeBase)
-		linkReqJSON, _ := json.Marshal(r.LinkRequest)
 		traceJSON, _ := json.Marshal(r.Trace)
 
 		_, err = stmt.ExecContext(ctx,
@@ -241,8 +232,8 @@ func (p *postgresDatabase) InsertBatch(ctx context.Context, results []runner.Res
 			r.Failed, r.Error, r.WebSocket, r.HTTP2, r.Pipeline, r.VHost,
 			r.Words, r.Lines, headerJSON, extractsJSON, pq.Array(r.ExtractRegex),
 			chainJSON, pq.Array(r.ChainStatusCodes),
-			r.HeadlessBody, r.ScreenshotBytes, r.ScreenshotPath, r.ScreenshotPathRel, r.StoredResponsePath,
-			kbJSON, linkReqJSON, traceJSON,
+			r.StoredResponsePath,
+			kbJSON, traceJSON,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert result: %w", err)

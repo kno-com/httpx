@@ -91,18 +91,7 @@ type ScanOptions struct {
 	OutputLinesCount          bool
 	OutputWordsCount          bool
 	Hashes                    string
-	Screenshot                bool
-	UseInstalledChrome        bool
 	DisableStdin              bool
-	NoScreenshotBytes         bool
-	NoHeadlessBody            bool
-	NoScreenshotFullPage      bool
-	ScreenshotTimeout         time.Duration
-	ScreenshotIdle            time.Duration
-}
-
-func (s *ScanOptions) IsScreenshotFullPage() bool {
-	return !s.NoScreenshotFullPage
 }
 
 func (s *ScanOptions) Clone() *ScanOptions {
@@ -152,13 +141,6 @@ func (s *ScanOptions) Clone() *ScanOptions {
 		OutputLinesCount:          s.OutputLinesCount,
 		OutputWordsCount:          s.OutputWordsCount,
 		Hashes:                    s.Hashes,
-		Screenshot:                s.Screenshot,
-		UseInstalledChrome:        s.UseInstalledChrome,
-		NoScreenshotBytes:         s.NoScreenshotBytes,
-		NoHeadlessBody:            s.NoHeadlessBody,
-		NoScreenshotFullPage:      s.NoScreenshotFullPage,
-		ScreenshotTimeout:         s.ScreenshotTimeout,
-		ScreenshotIdle:            s.ScreenshotIdle,
 	}
 }
 
@@ -308,22 +290,11 @@ type Options struct {
 	//The OnResult callback function is invoked for each result. It is important to check for errors in the result before using Result.Err.
 	OnResult             OnResultCallback
 	NoDecode             bool
-	Screenshot           bool
-	UseInstalledChrome   bool
 	DisableStdin         bool
 	HttpApiEndpoint      string
-	NoScreenshotBytes    bool
-	NoHeadlessBody       bool
-	NoScreenshotFullPage bool
-	ScreenshotTimeout    time.Duration
-	ScreenshotIdle       time.Duration
-	// HeadlessOptionalArguments specifies optional arguments to pass to Chrome
-	HeadlessOptionalArguments goflags.StringSlice
 	Protocol                  string
 	OutputFilterErrorPagePath string
 	DisableStdout             bool
-
-	JavascriptCodes goflags.StringSlice
 
 	// SecretFile is the path to the secret file for authentication
 	SecretFile string
@@ -389,18 +360,6 @@ func ParseOptions() *Options {
 		flagSet.BoolVar(&options.Asn, "asn", false, "display host asn information"),
 		flagSet.DynamicVar(&options.OutputCDN, "cdn", "true", "display cdn/waf in use"),
 		flagSet.BoolVar(&options.Probe, "probe", false, "display probe status"),
-	)
-
-	flagSet.CreateGroup("headless", "Headless",
-		flagSet.BoolVarP(&options.Screenshot, "screenshot", "ss", false, "enable saving screenshot of the page using headless browser"),
-		flagSet.BoolVar(&options.UseInstalledChrome, "system-chrome", false, "enable using local installed chrome for screenshot"),
-		flagSet.StringSliceVarP(&options.HeadlessOptionalArguments, "headless-options", "ho", nil, "start headless chrome with additional options", goflags.FileCommaSeparatedStringSliceOptions),
-		flagSet.BoolVarP(&options.NoScreenshotBytes, "exclude-screenshot-bytes", "esb", false, "enable excluding screenshot bytes from json output"),
-		flagSet.BoolVarP(&options.NoHeadlessBody, "exclude-headless-body", "ehb", false, "enable excluding headless header from json output"),
-		flagSet.BoolVar(&options.NoScreenshotFullPage, "no-screenshot-full-page", false, "disable saving full page screenshot"),
-		flagSet.DurationVarP(&options.ScreenshotTimeout, "screenshot-timeout", "st", 10*time.Second, "set timeout for screenshot in seconds"),
-		flagSet.DurationVarP(&options.ScreenshotIdle, "screenshot-idle", "sid", 1*time.Second, "set idle time before taking screenshot in seconds"),
-		flagSet.StringSliceVarP(&options.JavascriptCodes, "javascript-code", "jsc", nil, "execute JavaScript code after navigation", goflags.StringSliceOptions),
 	)
 
 	flagSet.CreateGroup("matchers", "Matchers",
@@ -719,10 +678,6 @@ func (options *Options) ValidateOptions() error {
 		gologger.Debug().Msgf("Using resolvers: %s\n", strings.Join(options.Resolvers, ","))
 	}
 
-	if options.Screenshot && !options.StoreResponse {
-		gologger.Debug().Msgf("automatically enabling store response")
-		options.StoreResponse = true
-	}
 	if options.StoreResponse && options.StoreResponseDir == "" {
 		gologger.Debug().Msgf("Store response directory not specified, using \"%s\"\n", DefaultOutputDirectory)
 		options.StoreResponseDir = DefaultOutputDirectory
@@ -756,32 +711,6 @@ func (options *Options) ValidateOptions() error {
 	}
 
 	return nil
-}
-
-// redundant with katana
-func (options *Options) ParseHeadlessOptionalArguments() map[string]string {
-	var (
-		lastKey           string
-		optionalArguments = make(map[string]string)
-	)
-	for _, v := range options.HeadlessOptionalArguments {
-		if v == "" {
-			continue
-		}
-		if argParts := strings.SplitN(v, "=", 2); len(argParts) >= 2 {
-			key := strings.TrimSpace(argParts[0])
-			value := strings.TrimSpace(argParts[1])
-			if key != "" && value != "" {
-				optionalArguments[key] = value
-				lastKey = key
-			}
-		} else if !strings.HasPrefix(v, "--") {
-			optionalArguments[lastKey] += "," + v
-		} else {
-			optionalArguments[v] = ""
-		}
-	}
-	return optionalArguments
 }
 
 // configureOutput configures the output on the screen

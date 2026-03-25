@@ -7,8 +7,6 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"html/template"
-	"image"
 	"io"
 	"net"
 	"net/http"
@@ -28,7 +26,6 @@ import (
 	"golang.org/x/exp/maps"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/corona10/goimagehash"
 	"github.com/gocarina/gocsv"
 	asnmap "github.com/projectdiscovery/asnmap/libs"
 	"github.com/projectdiscovery/fastdialer/fastdialer"
@@ -37,10 +34,8 @@ import (
 	"github.com/projectdiscovery/httpx/common/inputformats"
 	"github.com/happyhackingspace/dit"
 	"github.com/projectdiscovery/httpx/common/authprovider"
-	"github.com/projectdiscovery/httpx/static"
 	"github.com/projectdiscovery/mapcidr/asn"
 	"github.com/projectdiscovery/networkpolicy"
-	osutil "github.com/projectdiscovery/utils/os"
 	"github.com/projectdiscovery/utils/structs"
 
 	"github.com/Mzack9999/gcache"
@@ -90,7 +85,6 @@ type Runner struct {
 	stats              clistats.StatisticsClient
 	ratelimiter        ratelimit.Limiter
 	HostErrorsCache    gcache.Cache[string, int]
-	browser            *Browser
 	ditClassifier *dit.Classifier
 	dedup              *dedup.Deduplicator
 	httpApiEndpoint    *Server
@@ -163,7 +157,6 @@ func New(options *Options) (*Runner, error) {
 		// Don't remove index files if skip-dedupe is enabled (we want to append, not truncate)
 		if !options.SkipDedupe {
 			_ = os.RemoveAll(filepath.Join(options.StoreResponseDir, "response", "index.txt"))
-			_ = os.RemoveAll(filepath.Join(options.StoreResponseDir, "screenshot", "index_screenshot.txt"))
 		}
 	}
 
@@ -325,20 +318,6 @@ func New(options *Options) (*Runner, error) {
 	scanopts.MaxResponseBodySizeToSave = options.MaxResponseBodySizeToSave
 	scanopts.MaxResponseBodySizeToRead = options.MaxResponseBodySizeToRead
 	scanopts.extractRegexps = make(map[string]*regexp.Regexp)
-	if options.Screenshot {
-		browser, err := NewBrowser(options.HTTPProxy, options.UseInstalledChrome, options.ParseHeadlessOptionalArguments())
-		if err != nil {
-			return nil, err
-		}
-		runner.browser = browser
-	}
-	scanopts.Screenshot = options.Screenshot
-	scanopts.NoScreenshotBytes = options.NoScreenshotBytes
-	scanopts.NoHeadlessBody = options.NoHeadlessBody
-	scanopts.NoScreenshotFullPage = options.NoScreenshotFullPage
-	scanopts.UseInstalledChrome = options.UseInstalledChrome
-	scanopts.ScreenshotTimeout = options.ScreenshotTimeout
-	scanopts.ScreenshotIdle = options.ScreenshotIdle
 
 	if options.OutputExtractRegexs != nil {
 		for _, regex := range options.OutputExtractRegexs {
@@ -614,16 +593,12 @@ func (r *Runner) seen(k string) bool {
 	return ok
 }
 
-func (r *Runner) classifyPage(headlessBody, body string, pHash uint64) map[string]any {
+func (r *Runner) classifyPage(body string, pHash uint64) map[string]any {
 	kb := map[string]any{"pHash": pHash}
 	if r.ditClassifier == nil {
 		return kb
 	}
-	html := body
-	if headlessBody != "" {
-		html = headlessBody
-	}
-	result, err := r.ditClassifier.ExtractPageType(html)
+	result, err := r.ditClassifier.ExtractPageType(body)
 	if err != nil {
 		return kb
 	}
@@ -882,9 +857,6 @@ func (r *Runner) Close() {
 	if r.options.HostMaxErrors >= 0 {
 		r.HostErrorsCache.Purge()
 	}
-	if r.options.Screenshot {
-		r.browser.Close()
-	}
 	if r.options.ShowStatistics {
 		_ = r.stats.Stop()
 	}
@@ -908,14 +880,6 @@ func (r *Runner) RunEnumeration() {
 		responseFolder := filepath.Join(r.options.StoreResponseDir, "response")
 		if err := os.MkdirAll(responseFolder, os.ModePerm); err != nil {
 			gologger.Fatal().Msgf("Could not create output response directory '%s': %s\n", r.options.StoreResponseDir, err)
-		}
-	}
-
-	// screenshot folder
-	if r.options.Screenshot {
-		screenshotFolder := filepath.Join(r.options.StoreResponseDir, "screenshot")
-		if err := os.MkdirAll(screenshotFolder, os.ModePerm); err != nil {
-			gologger.Fatal().Msgf("Could not create output screenshot directory '%s': %s\n", r.options.StoreResponseDir, err)
 		}
 	}
 
@@ -953,7 +917,7 @@ func (r *Runner) RunEnumeration() {
 			}
 		}()
 
-		var plainFile, jsonFile, csvFile, mdFile, indexFile, indexScreenshotFile *os.File
+		var plainFile, jsonFile, csvFile, mdFile, indexFile *os.File
 		markdownHeaderWritten := false // guard to prevent writing the header multiple times
 
 		if r.options.Output != "" && r.options.OutputAll {
@@ -1057,21 +1021,6 @@ func (r *Runner) RunEnumeration() {
 				gologger.Fatal().Msgf("Could not open/create index file '%s': %s\n", r.options.Output, err)
 			}
 			defer indexFile.Close() //nolint
-		}
-
-		if r.options.Screenshot {
-			var err error
-			indexScreenshotPath := filepath.Join(r.options.StoreResponseDir, "screenshot", "index_screenshot.txt")
-			// Append if resume is enabled or skip-dedupe is enabled (never truncate with -sd)
-			if r.options.Resume || r.options.SkipDedupe {
-				indexScreenshotFile, err = os.OpenFile(indexScreenshotPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
-			} else {
-				indexScreenshotFile, err = os.Create(indexScreenshotPath)
-			}
-			if err != nil {
-				gologger.Fatal().Msgf("Could not open/create index screenshot file '%s': %s\n", r.options.Output, err)
-			}
-			defer indexScreenshotFile.Close() //nolint
 		}
 
 		for resp := range output {
@@ -1257,14 +1206,11 @@ func (r *Runner) RunEnumeration() {
 			if resp.Err == nil {
 				URL, _ := urlutil.Parse(resp.URL)
 				domainResponseFile := fmt.Sprintf("%s.txt", resp.FileNameHash)
-				screenshotResponseFile := fmt.Sprintf("%s.png", resp.FileNameHash)
 				hostFilename := strings.ReplaceAll(URL.Host, ":", "_")
 				domainResponseBaseDir := filepath.Join(r.options.StoreResponseDir, "response")
-				domainScreenshotBaseDir := filepath.Join(r.options.StoreResponseDir, "screenshot")
 				responseBaseDir := filepath.Join(domainResponseBaseDir, hostFilename)
-				screenshotBaseDir := filepath.Join(domainScreenshotBaseDir, hostFilename)
 
-				var responsePath, screenshotPath, screenshotPathRel string
+				var responsePath string
 				// store response
 				if r.scanopts.StoreResponse || r.scanopts.StoreChain {
 					if r.scanopts.OmitBody {
@@ -1293,29 +1239,9 @@ func (r *Runner) RunEnumeration() {
 					resp.StoredResponsePath = responsePath
 				}
 
-				if r.scanopts.Screenshot {
-					screenshotPath = fileutilz.AbsPathOrDefault(filepath.Join(screenshotBaseDir, screenshotResponseFile))
-					screenshotPathRel = filepath.Join(hostFilename, screenshotResponseFile)
-					_ = fileutil.CreateFolder(screenshotBaseDir)
-					err := os.WriteFile(screenshotPath, resp.ScreenshotBytes, 0644)
-					if err != nil {
-						gologger.Error().Msgf("Could not write screenshot at path '%s', to disk: %s", screenshotPath, err)
-					}
-
-					resp.ScreenshotPath = screenshotPath
-					resp.ScreenshotPathRel = screenshotPathRel
-					if r.scanopts.NoScreenshotBytes {
-						resp.ScreenshotBytes = []byte{}
-					}
-				}
-
 				if indexFile != nil {
 					indexData := fmt.Sprintf("%s %s (%d %s)\n", resp.StoredResponsePath, resp.URL, resp.StatusCode, http.StatusText(resp.StatusCode))
 					_, _ = indexFile.WriteString(indexData)
-				}
-				if indexScreenshotFile != nil && resp.ScreenshotPathRel != "" {
-					indexData := fmt.Sprintf("%s %s (%d %s)\n", resp.ScreenshotPathRel, resp.URL, resp.StatusCode, http.StatusText(resp.StatusCode))
-					_, _ = indexScreenshotFile.WriteString(indexData)
 				}
 
 				}
@@ -1391,51 +1317,10 @@ func (r *Runner) RunEnumeration() {
 		}
 	}(output, nextStep)
 
-	// HTML Summary
-	// - needs output of previous routine
-	// - separate goroutine due to incapability of go templates to render from file
+	// Drain the nextStep channel (keeps the pipeline moving)
 	wgoutput.Add(1)
 	go func(output chan Result) {
 		defer wgoutput.Done()
-
-		if r.options.Screenshot {
-			screenshotHtmlPath := filepath.Join(r.options.StoreResponseDir, "screenshot", "screenshot.html")
-			screenshotHtml, err := os.Create(screenshotHtmlPath)
-			if err != nil {
-				gologger.Warning().Msgf("Could not create HTML file %s\n", err)
-			}
-			defer func() {
-				_ = screenshotHtml.Close()
-			}()
-
-			templateMap := template.FuncMap{
-				"safeURL": func(u string) template.URL {
-					if osutil.IsWindows() {
-						u = filepath.ToSlash(u)
-					}
-					return template.URL(u)
-				},
-			}
-			tmpl, err := template.
-				New("screenshotTemplate").
-				Funcs(templateMap).
-				Parse(static.HtmlTemplate)
-			if err != nil {
-				gologger.Warning().Msgf("Could not create HTML template: %v\n", err)
-			}
-
-			if err = tmpl.Execute(screenshotHtml, struct {
-				Options Options
-				Output  chan Result
-			}{
-				Options: *r.options,
-				Output:  output,
-			}); err != nil {
-				gologger.Warning().Msgf("Could not execute HTML template: %v\n", err)
-			}
-		}
-
-		// fallthrough if anything is left in the buffer unblocks if screenshot is false
 		for range output {
 		}
 	}(nextStep)
@@ -2058,7 +1943,6 @@ retry:
 		request            string
 		rawResponseHeaders string
 		responseHeaders    map[string]interface{}
-		linkRequest        []NetworkRequest
 	)
 
 	if scanopts.ResponseHeadersInStdout {
@@ -2419,46 +2303,7 @@ retry:
 		chainItems = append(chainItems, resp.GetChainAsSlice()...)
 	}
 
-	// screenshot
-	var (
-		screenshotBytes []byte
-		headlessBody    string
-	)
 	var pHash uint64
-	if scanopts.Screenshot {
-		var err error
-		screenshotBytes, headlessBody, linkRequest, err = r.browser.ScreenshotWithBody(
-			fullURL,
-			scanopts.ScreenshotTimeout,
-			scanopts.ScreenshotIdle,
-			r.options.CustomHeaders,
-			scanopts.IsScreenshotFullPage(),
-			r.options.JavascriptCodes,
-		)
-		if err != nil {
-			gologger.Warning().Msgf("Could not take screenshot '%s': %s", fullURL, err)
-		} else {
-			pHash, err = calculatePerceptionHash(screenshotBytes)
-			if err != nil {
-				gologger.Warning().Msgf("%v: %s", err, fullURL)
-			}
-
-			// As we now have headless body, we can also use it for detecting
-			// more technologies in the response. This is a quick trick to get
-			// more detected technologies.
-			if r.options.TechDetect || r.options.JSONOutput || r.options.CSVOutput {
-				moreMatches := r.wappalyzer.FingerprintWithInfo(resp.Headers, []byte(headlessBody))
-				for match, data := range moreMatches {
-					technologies = append(technologies, match)
-					technologyDetails[match] = data
-				}
-				technologies = sliceutil.Dedupe(technologies)
-			}
-		}
-		if scanopts.NoHeadlessBody {
-			headlessBody = ""
-		}
-	}
 
 	if scanopts.TechDetect && len(technologies) > 0 {
 		sort.Strings(technologies)
@@ -2520,7 +2365,6 @@ retry:
 	result := Result{
 		Timestamp:        time.Now(),
 		Request:          request,
-		LinkRequest:      linkRequest,
 		ResponseHeaders:  responseHeaders,
 		RawHeaders:       rawResponseHeaders,
 		Scheme:           parsed.Scheme,
@@ -2567,9 +2411,7 @@ retry:
 		Words:            resp.Words,
 		ASN:              asnResponse,
 		ExtractRegex:     extractRegex,
-		ScreenshotBytes:  screenshotBytes,
-		HeadlessBody:     headlessBody,
-		KnowledgeBase: r.classifyPage(headlessBody, respData, pHash),
+		KnowledgeBase: r.classifyPage(respData, pHash),
 		TechnologyDetails: technologyDetails,
 		Resolvers:         resolvers,
 		RequestRaw:        requestDump,
@@ -2601,22 +2443,6 @@ func (r *Runner) skip(URL *urlutil.URL, target httpx.Target, origInput string) (
 	}
 
 	return false, Result{}
-}
-
-func calculatePerceptionHash(screenshotBytes []byte) (uint64, error) {
-	reader := bytes.NewReader(screenshotBytes)
-	img, _, err := image.Decode(reader)
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to decode screenshot")
-
-	}
-
-	pHash, err := goimagehash.PerceptionHash(img)
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to calculate perceptual hash")
-	}
-
-	return pHash.GetHash(), nil
 }
 
 func (r *Runner) HandleFaviconHash(hp *httpx.HTTPX, req *retryablehttp.Request, currentResp []byte, finalURL string, defaultProbe bool) (string, string, string, []byte, string, error) {
