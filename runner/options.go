@@ -27,7 +27,6 @@ import (
 	"github.com/projectdiscovery/networkpolicy"
 	fileutil "github.com/projectdiscovery/utils/file"
 	sliceutil "github.com/projectdiscovery/utils/slice"
-	stringsutil "github.com/projectdiscovery/utils/strings"
 	"github.com/projectdiscovery/utils/structs"
 	wappalyzer "github.com/projectdiscovery/wappalyzergo"
 )
@@ -228,7 +227,6 @@ type Options struct {
 	OutputExtractPresets      goflags.StringSlice
 	RateLimit                 int
 	RateLimitMinute           int
-	Probe                     bool
 	Resume                    bool
 	resumeCfg                 *ResumeCfg
 	Exclude                   goflags.StringSlice
@@ -268,7 +266,6 @@ type Options struct {
 	OnResult             OnResultCallback
 	NoDecode             bool
 	DisableStdin         bool
-	Protocol                  string
 	DisableStdout             bool
 
 	// OnClose adds a callback function that is invoked when httpx is closed
@@ -318,7 +315,6 @@ func ParseOptions() *Options {
 		flagSet.BoolVar(&options.OutputIP, "ip", false, "display host ip"),
 		flagSet.BoolVar(&options.OutputCName, "cname", false, "display host cname"),
 		flagSet.DynamicVar(&options.OutputCDN, "cdn", "true", "display cdn/waf in use"),
-		flagSet.BoolVar(&options.Probe, "probe", false, "display probe status"),
 	)
 
 	flagSet.CreateGroup("matchers", "Matchers",
@@ -385,7 +381,6 @@ func ParseOptions() *Options {
 		flagSet.BoolVarP(&options.Base64ResponseInStdout, "include-response-base64", "irrb", false, "include base64 encoded http request/response in JSON output (-json only)"),
 		flagSet.BoolVar(&options.ChainInStdout, "include-chain", false, "include redirect http chain in JSON output (-json only)"),
 		flagSet.BoolVar(&options.StoreChain, "store-chain", false, "include http redirect chain in responses (-sr only)"),
-		flagSet.StringVarP(&options.Protocol, "protocol", "pr", "", "protocol to use (unknown, http11, http2 [experimental], http3 [experimental])"),
 	)
 
 	flagSet.CreateGroup("configs", "Configurations",
@@ -638,10 +633,6 @@ func (options *Options) ValidateOptions() error {
 	}
 	if len(options.OutputMatchCdn) > 0 || len(options.OutputFilterCdn) > 0 {
 		options.OutputCDN = "true"
-	}
-
-	if !stringsutil.EqualFoldAny(options.Protocol, string(httpxcommon.UNKNOWN), string(httpxcommon.HTTP11)) {
-		return fmt.Errorf("invalid protocol: %s", options.Protocol)
 	}
 
 	if options.Threads == 0 {

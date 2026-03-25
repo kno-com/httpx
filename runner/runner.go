@@ -183,7 +183,6 @@ func New(options *Options) (*Runner, error) {
 		httpxOptions.MaxResponseBodySizeToSave = httpxOptions.MaxResponseBodySizeToRead
 	}
 	httpxOptions.Resolvers = options.Resolvers
-	httpxOptions.Protocol = httpx.Proto(options.Protocol)
 
 	var key, value string
 	httpxOptions.CustomHeaders = make(map[string]string)
@@ -1604,24 +1603,6 @@ retry:
 		builder.WriteString(stringz.RemoveURLDefaultPort(fullURL))
 	}
 
-	if r.options.Probe {
-		builder.WriteString(" [")
-
-		outputStatus := "SUCCESS"
-		if err != nil {
-			outputStatus = "FAILED"
-		}
-
-		if !scanopts.OutputWithNoColor && err != nil {
-			builder.WriteString(aurora.Red(outputStatus).String())
-		} else if !scanopts.OutputWithNoColor && err == nil {
-			builder.WriteString(aurora.Green(outputStatus).String())
-		} else {
-			builder.WriteString(outputStatus)
-		}
-
-		builder.WriteRune(']')
-	}
 	if err != nil {
 		errString := ""
 		errString = err.Error()
@@ -1659,11 +1640,7 @@ retry:
 			}
 		}
 
-		if r.options.Probe {
-			return Result{URL: URL.String(), Input: origInput, Timestamp: time.Now(), Err: err, Failed: err != nil, Error: errString, str: builder.String()}
-		} else {
-			return Result{URL: URL.String(), Input: origInput, Timestamp: time.Now(), Err: err}
-		}
+		return Result{URL: URL.String(), Input: origInput, Timestamp: time.Now(), Err: err}
 	}
 
 	if scanopts.OutputStatusCode {
