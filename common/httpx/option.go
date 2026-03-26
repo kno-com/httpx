@@ -21,7 +21,6 @@ func init() {
 // Options contains configuration options for the client
 type Options struct {
 	RandomAgent      bool
-	AutoReferer      bool
 	DefaultUserAgent string
 	Proxy            string
 	// Deprecated: use Proxy
@@ -31,34 +30,22 @@ type Options struct {
 	Threads     int
 	CdnCheck    string
 	ExcludeCdn  bool
-	ExtractFqdn bool
 	// Timeout is the maximum time to wait for the request
 	Timeout time.Duration
 	// RetryMax is the maximum number of retries
 	RetryMax      int
 	CustomHeaders map[string]string
-	// VHostSimilarityRatio 1 - 100
-	VHostSimilarityRatio int
 	FollowRedirects      bool
 	FollowHostRedirects  bool
 	RespectHSTS          bool
 	MaxRedirects         int
-	Unsafe               bool
-	// VHOSTs options
-	VHostIgnoreStatusCode     bool
-	VHostIgnoreContentLength  bool
-	VHostIgnoreNumberOfWords  bool
-	VHostIgnoreNumberOfLines  bool
-	VHostStripHTML            bool
 	MaxResponseBodySizeToSave int64
 	MaxResponseBodySizeToRead int64
-	UnsafeURI                 string
 	Resolvers                 []string
 	customCookies             []*http.Cookie
 	NetworkPolicy             *networkpolicy.NetworkPolicy
 	CDNCheckClient            *cdncheck.Client
 	Protocol                  Proto
-	Trace                     bool
 }
 
 // DefaultOptions contains the default options
@@ -68,17 +55,9 @@ var DefaultOptions = Options{
 	Timeout:                   30 * time.Second,
 	RetryMax:                  5,
 	MaxRedirects:              10,
-	Unsafe:                    false,
 	CdnCheck:                  "true",
 	ExcludeCdn:                false,
 	MaxResponseBodySizeToRead: DefaultMaxResponseBodySize,
-	// VHOSTs options
-	VHostIgnoreStatusCode:    false,
-	VHostIgnoreContentLength: true,
-	VHostIgnoreNumberOfWords: false,
-	VHostIgnoreNumberOfLines: false,
-	VHostStripHTML:           false,
-	VHostSimilarityRatio:     85,
 	DefaultUserAgent:         "httpx - Open-source project (github.com/projectdiscovery/httpx)",
 }
 

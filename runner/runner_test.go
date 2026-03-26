@@ -193,7 +193,7 @@ func TestRunner_cidr_targets(t *testing.T) {
 }
 
 func TestRunner_asn_targets(t *testing.T) {
-	if os.Getenv("PDCP_API_KEY") == "" {
+	if os.Getenv("ASN_API_KEY") == "" {
 		return
 	}
 
@@ -256,7 +256,7 @@ func TestRunner_countTargetFromRawTarget(t *testing.T) {
 	require.Nil(t, err, "could not count targets")
 	require.Equal(t, expected, got, "got wrong output")
 
-	if os.Getenv("PDCP_API_KEY") != "" {
+	if os.Getenv("ASN_API_KEY") != "" {
 		input = "AS14421"
 		expected = 256
 		got, err = r.countTargetFromRawTarget(input)

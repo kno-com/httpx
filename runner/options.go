@@ -3,7 +3,6 @@ package runner
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -26,13 +25,8 @@ import (
 	"github.com/projectdiscovery/httpx/common/inputformats"
 	"github.com/projectdiscovery/httpx/common/stringz"
 	"github.com/projectdiscovery/networkpolicy"
-	pdcpauth "github.com/projectdiscovery/utils/auth/pdcp"
-	"github.com/projectdiscovery/utils/env"
 	fileutil "github.com/projectdiscovery/utils/file"
 	sliceutil "github.com/projectdiscovery/utils/slice"
-	stringsutil "github.com/projectdiscovery/utils/strings"
-	"github.com/projectdiscovery/utils/structs"
-	updateutils "github.com/projectdiscovery/utils/update"
 	wappalyzer "github.com/projectdiscovery/wappalyzergo"
 )
 
@@ -43,11 +37,6 @@ const (
 	DefaultOutputDirectory = "output"
 )
 
-var (
-	PDCPApiKey = ""
-	TeamIDEnv  = env.GetEnvOrDefault("PDCP_TEAM_ID", "")
-)
-
 // OnResultCallback (hostResult)
 type OnResultCallback func(Result)
 
@@ -56,7 +45,6 @@ type ScanOptions struct {
 	StoreResponseDirectory    string
 	RequestURI                string
 	RequestBody               string
-	VHost                     bool
 	OutputTitle               bool
 	OutputStatusCode          bool
 	OutputLocation            bool
@@ -69,13 +57,8 @@ type ScanOptions struct {
 	OutputMethod              bool
 	ResponseHeadersInStdout   bool
 	ResponseInStdout          bool
-	Base64ResponseInStdout    bool
 	ChainInStdout             bool
-	CSPProbe                  bool
-	VHostInput                bool
 	OutputContentType         bool
-	Unsafe                    bool
-	Pipeline                  bool
 	HTTP2Probe                bool
 	OutputIP                  bool
 	OutputCName               bool
@@ -85,10 +68,6 @@ type ScanOptions struct {
 	NoFallback                bool
 	NoFallbackScheme          bool
 	TechDetect                bool
-	CPEDetect                 bool
-	WordPress                 bool
-	StoreChain                bool
-	StoreVisionReconClusters  bool
 	MaxResponseBodySizeToSave int
 	MaxResponseBodySizeToRead int
 	OutputExtractRegex        string
@@ -97,22 +76,10 @@ type ScanOptions struct {
 	HostMaxErrors             int
 	ProbeAllIPS               bool
 	Favicon                   bool
-	LeaveDefaultPorts         bool
 	OutputLinesCount          bool
 	OutputWordsCount          bool
 	Hashes                    string
-	Screenshot                bool
-	UseInstalledChrome        bool
 	DisableStdin              bool
-	NoScreenshotBytes         bool
-	NoHeadlessBody            bool
-	NoScreenshotFullPage      bool
-	ScreenshotTimeout         time.Duration
-	ScreenshotIdle            time.Duration
-}
-
-func (s *ScanOptions) IsScreenshotFullPage() bool {
-	return !s.NoScreenshotFullPage
 }
 
 func (s *ScanOptions) Clone() *ScanOptions {
@@ -121,7 +88,6 @@ func (s *ScanOptions) Clone() *ScanOptions {
 		StoreResponseDirectory:    s.StoreResponseDirectory,
 		RequestURI:                s.RequestURI,
 		RequestBody:               s.RequestBody,
-		VHost:                     s.VHost,
 		OutputTitle:               s.OutputTitle,
 		OutputStatusCode:          s.OutputStatusCode,
 		OutputLocation:            s.OutputLocation,
@@ -134,12 +100,8 @@ func (s *ScanOptions) Clone() *ScanOptions {
 		OutputMethod:              s.OutputMethod,
 		ResponseHeadersInStdout:   s.ResponseHeadersInStdout,
 		ResponseInStdout:          s.ResponseInStdout,
-		Base64ResponseInStdout:    s.Base64ResponseInStdout,
 		ChainInStdout:             s.ChainInStdout,
-		CSPProbe:                  s.CSPProbe,
 		OutputContentType:         s.OutputContentType,
-		Unsafe:                    s.Unsafe,
-		Pipeline:                  s.Pipeline,
 		HTTP2Probe:                s.HTTP2Probe,
 		OutputIP:                  s.OutputIP,
 		OutputCName:               s.OutputCName,
@@ -149,26 +111,15 @@ func (s *ScanOptions) Clone() *ScanOptions {
 		NoFallback:                s.NoFallback,
 		NoFallbackScheme:          s.NoFallbackScheme,
 		TechDetect:                s.TechDetect,
-		CPEDetect:                 s.CPEDetect,
-		WordPress:                 s.WordPress,
-		StoreChain:                s.StoreChain,
 		OutputExtractRegex:        s.OutputExtractRegex,
 		MaxResponseBodySizeToSave: s.MaxResponseBodySizeToSave,
 		MaxResponseBodySizeToRead: s.MaxResponseBodySizeToRead,
 		HostMaxErrors:             s.HostMaxErrors,
 		Favicon:                   s.Favicon,
 		extractRegexps:            s.extractRegexps,
-		LeaveDefaultPorts:         s.LeaveDefaultPorts,
 		OutputLinesCount:          s.OutputLinesCount,
 		OutputWordsCount:          s.OutputWordsCount,
 		Hashes:                    s.Hashes,
-		Screenshot:                s.Screenshot,
-		UseInstalledChrome:        s.UseInstalledChrome,
-		NoScreenshotBytes:         s.NoScreenshotBytes,
-		NoHeadlessBody:            s.NoHeadlessBody,
-		NoScreenshotFullPage:      s.NoScreenshotFullPage,
-		ScreenshotTimeout:         s.ScreenshotTimeout,
-		ScreenshotIdle:            s.ScreenshotIdle,
 	}
 }
 
@@ -181,7 +132,6 @@ type Options struct {
 	filterStatusCode    []int
 	filterContentLength []int
 	Output              string
-	OutputAll           bool
 	StoreResponseDir    string
 	OmitBody            bool
 	// Deprecated: use Proxy
@@ -199,8 +149,6 @@ type Options struct {
 	OutputMatchStatusCode     string
 	OutputMatchContentLength  string
 	OutputFilterStatusCode    string
-	// Deprecated: use OutputFilterPageType with "error" instead.
-	OutputFilterErrorPage bool
 	OutputFilterPageType      goflags.StringSlice
 	FilterOutDuplicates       bool
 	OutputFilterContentLength string
@@ -217,8 +165,6 @@ type Options struct {
 	Delay                     time.Duration
 	filterRegexes             []*regexp.Regexp
 	matchRegexes              []*regexp.Regexp
-	VHost                     bool
-	VHostInput                bool
 	Smuggling                 bool
 	ExtractTitle              bool
 	StatusCode                bool
@@ -228,11 +174,7 @@ type Options struct {
 	RespectHSTS               bool
 	StoreResponse             bool
 	JSONOutput                bool
-	MarkDownOutput            bool
 	CSVOutput                 bool
-	CSVOutputEncoding         string
-	PdcpAuth                  string
-	PdcpAuthCredFile          string
 	Silent                    bool
 	Version                   bool
 	Verbose                   bool
@@ -241,37 +183,22 @@ type Options struct {
 	OutputWebSocket           bool
 	ResponseHeadersInStdout   bool
 	ResponseInStdout          bool
-	Base64ResponseInStdout    bool
 	ChainInStdout             bool
 	FollowHostRedirects       bool
 	MaxRedirects              int
 	OutputMethod              bool
-	CSPProbe                  bool
 	OutputContentType         bool
 	OutputIP                  bool
 	OutputCName               bool
-	ExtractFqdn               bool
-	Unsafe                    bool
 	Debug                     bool
-	DebugRequests             bool
-	DebugResponse             bool
-	Pipeline                  bool
 	HTTP2Probe                bool
 	OutputCDN                 string
 	OutputResponseTime        bool
 	NoFallback                bool
 	NoFallbackScheme          bool
 	TechDetect                bool
-	CPEDetect                 bool
-	WordPress                 bool
-	CustomFingerprintFile     string
 	protocol                  string
-	ShowStatistics            bool
-	StatsInterval             int
 	RandomAgent               bool
-	AutoReferer               bool
-	StoreChain                bool
-	StoreVisionReconClusters  bool
 	Deny                      customlist.CustomList
 	Allow                     customlist.CustomList
 	MaxResponseBodySizeToSave int
@@ -281,7 +208,6 @@ type Options struct {
 	OutputExtractPresets      goflags.StringSlice
 	RateLimit                 int
 	RateLimitMinute           int
-	Probe                     bool
 	Resume                    bool
 	resumeCfg                 *ResumeCfg
 	Exclude                   goflags.StringSlice
@@ -293,7 +219,6 @@ type Options struct {
 	Favicon                   bool
 	OutputFilterFavicon       goflags.StringSlice
 	OutputMatchFavicon        goflags.StringSlice
-	LeaveDefaultPorts         bool
 	OutputLinesCount          bool
 	OutputMatchLinesCount     string
 	matchLinesCount           []int
@@ -307,64 +232,21 @@ type Options struct {
 	filterWordsCount          []int
 	Hashes                    string
 	SimhashThreshold          int
-	Asn                       bool
 	OutputMatchCdn            goflags.StringSlice
 	OutputFilterCdn           goflags.StringSlice
 	OutputMatchResponseTime   string
 	OutputFilterResponseTime  string
-	HealthCheck               bool
-	ListDSLVariable           bool
 	OutputFilterCondition     string
 	OutputMatchCondition      string
-	StripFilter               string
-	ListOutputFields          bool
 	ExcludeOutputFields       goflags.StringSlice
 	//The OnResult callback function is invoked for each result. It is important to check for errors in the result before using Result.Err.
 	OnResult             OnResultCallback
-	DisableUpdateCheck   bool
-	NoDecode             bool
-	Screenshot           bool
-	UseInstalledChrome   bool
 	DisableStdin         bool
-	HttpApiEndpoint      string
-	NoScreenshotBytes    bool
-	NoHeadlessBody       bool
-	NoScreenshotFullPage bool
-	ScreenshotTimeout    time.Duration
-	ScreenshotIdle       time.Duration
-	// HeadlessOptionalArguments specifies optional arguments to pass to Chrome
-	HeadlessOptionalArguments goflags.StringSlice
-	Protocol                  string
-	OutputFilterErrorPagePath string
 	DisableStdout             bool
 
-	JavascriptCodes goflags.StringSlice
-
-	// AssetUpload
-	AssetUpload bool
-	// AssetName
-	AssetName string
-	// AssetID
-	AssetID string
-	// AssetFileUpload
-	AssetFileUpload string
-	TeamID          string
-	// SecretFile is the path to the secret file for authentication
-	SecretFile string
 	// OnClose adds a callback function that is invoked when httpx is closed
 	// to be exact at end of existing closures
 	OnClose func()
-
-	Trace bool
-
-	ResultDatabase          bool
-	ResultDatabaseConfig    string
-	ResultDatabaseType      string
-	ResultDatabaseConnStr   string
-	ResultDatabaseName      string
-	ResultDatabaseTable     string
-	ResultDatabaseBatchSize int
-	ResultDatabaseOmitRaw   bool
 
 	// Optional pre-created objects to reduce allocations
 	Wappalyzer     *wappalyzer.Wappalyze
@@ -402,29 +284,11 @@ func ParseOptions() *Options {
 		flagSet.DynamicVarP(&options.ResponseBodyPreviewSize, "body-preview", "bp", 100, "display first N characters of response body"),
 		flagSet.BoolVarP(&options.OutputServerHeader, "web-server", "server", false, "display server name"),
 		flagSet.BoolVarP(&options.TechDetect, "tech-detect", "td", false, "display technology in use based on wappalyzer dataset"),
-		flagSet.StringVarP(&options.CustomFingerprintFile, "custom-fingerprint-file", "cff", "", "path to a custom fingerprint file for technology detection"),
-		flagSet.BoolVar(&options.CPEDetect, "cpe", false, "display CPE (Common Platform Enumeration) based on awesome-search-queries"),
-		flagSet.BoolVarP(&options.WordPress, "wordpress", "wp", false, "display WordPress plugins and themes"),
 		flagSet.BoolVar(&options.OutputMethod, "method", false, "display http request method"),
 		flagSet.BoolVarP(&options.OutputWebSocket, "websocket", "ws", false, "display server using websocket"),
 		flagSet.BoolVar(&options.OutputIP, "ip", false, "display host ip"),
 		flagSet.BoolVar(&options.OutputCName, "cname", false, "display host cname"),
-		flagSet.BoolVarP(&options.ExtractFqdn, "efqdn", "extract-fqdn", false, "get domain and subdomains from response body and header in jsonl/csv output"),
-		flagSet.BoolVar(&options.Asn, "asn", false, "display host asn information"),
 		flagSet.DynamicVar(&options.OutputCDN, "cdn", "true", "display cdn/waf in use"),
-		flagSet.BoolVar(&options.Probe, "probe", false, "display probe status"),
-	)
-
-	flagSet.CreateGroup("headless", "Headless",
-		flagSet.BoolVarP(&options.Screenshot, "screenshot", "ss", false, "enable saving screenshot of the page using headless browser"),
-		flagSet.BoolVar(&options.UseInstalledChrome, "system-chrome", false, "enable using local installed chrome for screenshot"),
-		flagSet.StringSliceVarP(&options.HeadlessOptionalArguments, "headless-options", "ho", nil, "start headless chrome with additional options", goflags.FileCommaSeparatedStringSliceOptions),
-		flagSet.BoolVarP(&options.NoScreenshotBytes, "exclude-screenshot-bytes", "esb", false, "enable excluding screenshot bytes from json output"),
-		flagSet.BoolVarP(&options.NoHeadlessBody, "exclude-headless-body", "ehb", false, "enable excluding headless header from json output"),
-		flagSet.BoolVar(&options.NoScreenshotFullPage, "no-screenshot-full-page", false, "disable saving full page screenshot"),
-		flagSet.DurationVarP(&options.ScreenshotTimeout, "screenshot-timeout", "st", 10*time.Second, "set timeout for screenshot in seconds"),
-		flagSet.DurationVarP(&options.ScreenshotIdle, "screenshot-idle", "sid", 1*time.Second, "set idle time before taking screenshot in seconds"),
-		flagSet.StringSliceVarP(&options.JavascriptCodes, "javascript-code", "jsc", nil, "execute JavaScript code after navigation", goflags.StringSliceOptions),
 	)
 
 	flagSet.CreateGroup("matchers", "Matchers",
@@ -448,7 +312,6 @@ func ParseOptions() *Options {
 	flagSet.CreateGroup("filters", "Filters",
 		flagSet.StringVarP(&options.OutputFilterStatusCode, "filter-code", "fc", "", "filter response with specified status code (-fc 403,401)"),
 		flagSet.StringSliceVarP(&options.OutputFilterPageType, "filter-page-type", "fpt", nil, "filter response with specified page type (e.g. -fpt login,captcha,parked)", goflags.CommaSeparatedStringSliceOptions),
-		flagSet.BoolVarP(&options.OutputFilterErrorPage, "filter-error-page", "fep", false, "[DEPRECATED: use -fpt] filter response with ML based error page detection"),
 		flagSet.BoolVarP(&options.FilterOutDuplicates, "filter-duplicates", "fd", false, "filter out near-duplicate responses (only first response is retained)"),
 		flagSet.StringVarP(&options.OutputFilterContentLength, "filter-length", "fl", "", "filter response with specified content length (-fl 23,33)"),
 		flagSet.StringVarP(&options.OutputFilterLinesCount, "filter-line-count", "flc", "", "filter response body with specified line count (-flc 423,532)"),
@@ -459,8 +322,6 @@ func ParseOptions() *Options {
 		flagSet.StringSliceVarP(&options.OutputFilterCdn, "filter-cdn", "fcdn", nil, fmt.Sprintf("filter host with specified cdn provider (%s)", cdncheck.DefaultCDNProviders), goflags.NormalizedStringSliceOptions),
 		flagSet.StringVarP(&options.OutputFilterResponseTime, "filter-response-time", "frt", "", "filter response with specified response time in seconds (-frt '> 1')"),
 		flagSet.StringVarP(&options.OutputFilterCondition, "filter-condition", "fdc", "", "filter response with dsl expression condition"),
-		flagSet.DynamicVar(&options.StripFilter, "strip", "html", "strips all tags in response. supported formats: html,xml"),
-		flagSet.BoolVarP(&options.ListOutputFields, "list-output-fields", "lof", false, "list of fields to output (comma separated)"),
 		flagSet.StringSliceVarP(&options.ExcludeOutputFields, "exclude-output-fields", "eof", nil, "exclude output fields output based on a condition", goflags.NormalizedOriginalStringSliceOptions),
 	)
 
@@ -474,44 +335,19 @@ func ParseOptions() *Options {
 		flagSet.BoolVarP(&options.ProbeAllIPS, "probe-all-ips", "pa", false, "probe all the ips associated with same host"),
 		flagSet.VarP(&options.CustomPorts, "ports", "p", "ports to probe (nmap syntax: eg http:1,2-10,11,https:80)"),
 		flagSet.StringVar(&options.RequestURIs, "path", "", "path or list of paths to probe (comma-separated, file)"),
-		flagSet.BoolVar(&options.CSPProbe, "csp-probe", false, "send http probes on the extracted CSP domains"),
-		flagSet.BoolVar(&options.Pipeline, "pipeline", false, "probe and display server supporting HTTP1.1 pipeline"),
 		flagSet.BoolVar(&options.HTTP2Probe, "http2", false, "probe and display server supporting HTTP2"),
-		flagSet.BoolVar(&options.VHost, "vhost", false, "probe and display server supporting VHOST"),
-		flagSet.BoolVarP(&options.ListDSLVariable, "list-dsl-variables", "ldv", false, "list json output field keys name that support dsl matcher/filter"),
-	)
-
-	flagSet.CreateGroup("update", "Update",
-		flagSet.CallbackVarP(GetUpdateCallback(), "update", "up", "update httpx to latest version"),
-		flagSet.BoolVarP(&options.DisableUpdateCheck, "disable-update-check", "duc", false, "disable automatic httpx update check"),
 	)
 
 	flagSet.CreateGroup("output", "Output",
 		flagSet.StringVarP(&options.Output, "output", "o", "", "file to write output results"),
-		flagSet.BoolVarP(&options.OutputAll, "output-all", "oa", false, "filename to write output results in all formats"),
 		flagSet.BoolVarP(&options.StoreResponse, "store-response", "sr", false, "store http response to output directory"),
 		flagSet.StringVarP(&options.StoreResponseDir, "store-response-dir", "srd", "", "store http response to custom directory"),
 		flagSet.BoolVarP(&options.OmitBody, "omit-body", "ob", false, "omit response body in output"),
 		flagSet.BoolVar(&options.CSVOutput, "csv", false, "store output in csv format"),
-		flagSet.StringVarP(&options.CSVOutputEncoding, "csv-output-encoding", "csvo", "", "define output encoding"),
 		flagSet.BoolVarP(&options.JSONOutput, "json", "j", false, "store output in JSONL(ines) format"),
-		flagSet.BoolVarP(&options.MarkDownOutput, "markdown", "md", false, "store output in Markdown table format"),
 		flagSet.BoolVarP(&options.ResponseHeadersInStdout, "include-response-header", "irh", false, "include http response (headers) in JSON output (-json only)"),
 		flagSet.BoolVarP(&options.ResponseInStdout, "include-response", "irr", false, "include http request/response (headers + body) in JSON output (-json only)"),
-		flagSet.BoolVarP(&options.Base64ResponseInStdout, "include-response-base64", "irrb", false, "include base64 encoded http request/response in JSON output (-json only)"),
 		flagSet.BoolVar(&options.ChainInStdout, "include-chain", false, "include redirect http chain in JSON output (-json only)"),
-		flagSet.BoolVar(&options.StoreChain, "store-chain", false, "include http redirect chain in responses (-sr only)"),
-		flagSet.BoolVarP(&options.StoreVisionReconClusters, "store-vision-recon-cluster", "svrc", false, "include visual recon clusters (-ss and -sr only)"),
-		flagSet.StringVarP(&options.Protocol, "protocol", "pr", "", "protocol to use (unknown, http11, http2 [experimental], http3 [experimental])"),
-		flagSet.StringVarP(&options.OutputFilterErrorPagePath, "filter-error-page-path", "fepp", "filtered_error_page.json", "path to store filtered error pages"),
-		flagSet.BoolVarP(&options.ResultDatabase, "result-db", "rdb", false, "store results in database"),
-		flagSet.StringVarP(&options.ResultDatabaseConfig, "result-db-config", "rdbc", "", "path to database config file"),
-		flagSet.StringVarP(&options.ResultDatabaseType, "result-db-type", "rdbt", "", "database type (mongodb, postgres, mysql)"),
-		flagSet.StringVarEnv(&options.ResultDatabaseConnStr, "result-db-conn", "rdbcs", "", "HTTPX_DB_CONNECTION_STRING", "database connection string"),
-		flagSet.StringVarP(&options.ResultDatabaseName, "result-db-name", "rdbn", "httpx", "database name"),
-		flagSet.StringVarP(&options.ResultDatabaseTable, "result-db-table", "rdbtb", "results", "table/collection name"),
-		flagSet.IntVarP(&options.ResultDatabaseBatchSize, "result-db-batch-size", "rdbbs", 100, "batch size for database inserts"),
-		flagSet.BoolVarP(&options.ResultDatabaseOmitRaw, "result-db-omit-raw", "rdbor", false, "omit raw request/response data from database"),
 	)
 
 	flagSet.CreateGroup("configs", "Configurations",
@@ -520,40 +356,27 @@ func ParseOptions() *Options {
 		flagSet.Var(&options.Allow, "allow", "allowed list of IP/CIDR's to process (file or comma separated)"),
 		flagSet.Var(&options.Deny, "deny", "denied list of IP/CIDR's to process (file or comma separated)"),
 		flagSet.BoolVar(&options.RandomAgent, "random-agent", true, "enable Random User-Agent to use"),
-		flagSet.BoolVar(&options.AutoReferer, "auto-referer", false, "set the Referer header to the current URL"),
 		flagSet.VarP(&options.CustomHeaders, "header", "H", "custom http headers to send with request"),
 		flagSet.StringVarP(&options.Proxy, "proxy", "http-proxy", "", "proxy (http|socks) to use (eg http://127.0.0.1:8080)"),
-		flagSet.BoolVar(&options.Unsafe, "unsafe", false, "send raw requests skipping golang normalization"),
 		flagSet.BoolVar(&options.Resume, "resume", false, "resume scan using resume.cfg"),
 		flagSet.BoolVarP(&options.FollowRedirects, "follow-redirects", "fr", false, "follow http redirects"),
 		flagSet.IntVarP(&options.MaxRedirects, "max-redirects", "maxr", 10, "max number of redirects to follow per host"),
 		flagSet.BoolVarP(&options.FollowHostRedirects, "follow-host-redirects", "fhr", false, "follow redirects on the same host"),
 		flagSet.BoolVarP(&options.RespectHSTS, "respect-hsts", "rhsts", false, "respect HSTS response headers for redirect requests"),
-		flagSet.BoolVar(&options.VHostInput, "vhost-input", false, "get a list of vhosts as input"),
 		flagSet.StringVar(&options.Methods, "x", "", "request methods to probe, use 'all' to probe all HTTP methods"),
 		flagSet.StringVar(&options.RequestBody, "body", "", "post body to include in http request"),
 		flagSet.BoolVarP(&options.Stream, "stream", "s", false, "stream mode - start elaborating input targets without sorting"),
 		flagSet.BoolVarP(&options.SkipDedupe, "skip-dedupe", "sd", false, "disable dedupe input items (only used with stream mode)"),
-		flagSet.BoolVarP(&options.LeaveDefaultPorts, "leave-default-ports", "ldp", false, "leave default http/https ports in host header (eg. http://host:80 - https://host:443"),
-		flagSet.BoolVar(&options.NoDecode, "no-decode", false, "avoid decoding body"),
 		flagSet.BoolVar(&options.DisableStdin, "no-stdin", false, "Disable Stdin processing"),
-		flagSet.StringVarP(&options.HttpApiEndpoint, "http-api-endpoint", "hae", "", "experimental http api endpoint"),
-		flagSet.StringVarP(&options.SecretFile, "secret-file", "sf", "", "path to the secret file for authentication"),
 	)
 
 	flagSet.CreateGroup("debug", "Debug",
-		flagSet.BoolVarP(&options.HealthCheck, "hc", "health-check", false, "run diagnostic check up"),
 		flagSet.BoolVar(&options.Debug, "debug", false, "display request/response content in cli"),
-		flagSet.BoolVar(&options.DebugRequests, "debug-req", false, "display request content in cli"),
-		flagSet.BoolVar(&options.DebugResponse, "debug-resp", false, "display response content in cli"),
 		flagSet.BoolVar(&options.Version, "version", false, "display httpx version"),
-		flagSet.BoolVar(&options.ShowStatistics, "stats", false, "display scan statistic"),
 		flagSet.StringVar(&options.Memprofile, "profile-mem", "", "optional httpx memory profile dump file"),
 		flagSet.BoolVar(&options.Silent, "silent", false, "silent mode"),
 		flagSet.BoolVarP(&options.Verbose, "verbose", "v", false, "verbose mode"),
-		flagSet.IntVarP(&options.StatsInterval, "stats-interval", "si", 0, "number of seconds to wait between showing a statistics update (default: 5)"),
 		flagSet.BoolVarP(&options.NoColor, "no-color", "nc", false, "disable colors in cli output"),
-		flagSet.BoolVarP(&options.Trace, "trace", "tr", false, "trace"),
 	)
 
 	flagSet.CreateGroup("Optimizations", "Optimizations",
@@ -568,37 +391,7 @@ func ParseOptions() *Options {
 		flagSet.IntVarP(&options.MaxResponseBodySizeToRead, "response-size-to-read", "rstr", int(httpxcommon.DefaultMaxResponseBodySize), "max response size to read in bytes"),
 	)
 
-	flagSet.CreateGroup("cloud", "Cloud",
-		flagSet.DynamicVar(&options.PdcpAuth, "auth", "true", "configure projectdiscovery cloud (pdcp) api key"),
-		flagSet.StringVarP(&options.PdcpAuthCredFile, "auth-config", "ac", "", "configure projectdiscovery cloud (pdcp) api key credential file"),
-		flagSet.BoolVarP(&options.AssetUpload, "dashboard", "pd", false, "upload / view output in projectdiscovery cloud (pdcp) UI dashboard"),
-		flagSet.StringVarP(&options.TeamID, "team-id", "tid", TeamIDEnv, "upload asset results to given team id (optional)"),
-		flagSet.StringVarP(&options.AssetID, "asset-id", "aid", "", "upload new assets to existing asset id (optional)"),
-		flagSet.StringVarP(&options.AssetName, "asset-name", "aname", "", "assets group name to set (optional)"),
-		flagSet.StringVarP(&options.AssetFileUpload, "dashboard-upload", "pdu", "", "upload httpx output file (jsonl) in projectdiscovery cloud (pdcp) UI dashboard"),
-	)
-
 	_ = flagSet.Parse()
-
-	if options.ListOutputFields {
-		fields, err := structs.GetStructFields(Result{})
-		if err != nil {
-			gologger.Fatal().Msgf("Could not get struct fields: %s\n", err)
-		}
-		for _, field := range fields {
-			fmt.Println(field)
-		}
-		os.Exit(0)
-	}
-
-	if options.OutputAll && options.Output == "" {
-		gologger.Fatal().Msg("Please specify an output file using -o/-output when using -oa/-output-all")
-	}
-
-	if options.OutputAll {
-		options.JSONOutput = true
-		options.CSVOutput = true
-	}
 
 	if cfgFile != "" {
 		if !fileutil.FileExists(cfgFile) {
@@ -610,38 +403,6 @@ func ParseOptions() *Options {
 		}
 	}
 
-	if options.PdcpAuthCredFile != "" {
-		pdcpauth.PDCPCredFile = options.PdcpAuthCredFile
-		pdcpauth.PDCPDir = filepath.Dir(pdcpauth.PDCPCredFile)
-	}
-
-	// api key hierarchy: cli flag > env var > .pdcp/credential file
-	if options.PdcpAuth == "true" {
-		AuthWithPDCP()
-	} else if len(options.PdcpAuth) == 36 {
-		PDCPApiKey = options.PdcpAuth
-		ph := pdcpauth.PDCPCredHandler{}
-		if _, err := ph.GetCreds(); err == pdcpauth.ErrNoCreds {
-			apiServer := env.GetEnvOrDefault("PDCP_API_SERVER", pdcpauth.DefaultApiServer)
-			if validatedCreds, err := ph.ValidateAPIKey(PDCPApiKey, apiServer, "httpx"); err == nil {
-				_ = ph.SaveCreds(validatedCreds)
-			}
-		}
-	}
-
-	if options.HealthCheck {
-		gologger.Print().Msgf("%s\n", DoHealthCheck(options, flagSet))
-		os.Exit(0)
-	}
-
-	if options.StatsInterval != 0 {
-		options.ShowStatistics = true
-	}
-
-	if options.ResponseBodyPreviewSize > 0 && options.StripFilter == "" {
-		options.StripFilter = "html"
-	}
-
 	// Read the inputs and configure the logging
 	options.configureOutput()
 
@@ -649,32 +410,11 @@ func ParseOptions() *Options {
 	if err != nil {
 		gologger.Fatal().Msgf("%s\n", err)
 	}
-	if options.ListDSLVariable {
-		dslVars, err := dslVariables()
-		if err != nil {
-			gologger.Fatal().Msgf("%s\n", err)
-		}
-		for _, dsl := range dslVars {
-			gologger.Print().Msg(dsl)
-		}
-		os.Exit(0)
-	}
 	showBanner()
 
 	if options.Version {
 		gologger.Info().Msgf("Current Version: %s\n", Version)
 		os.Exit(0)
-	}
-
-	if !options.DisableUpdateCheck {
-		latestVersion, err := updateutils.GetToolVersionCallback("httpx", Version)()
-		if err != nil {
-			if options.Verbose {
-				gologger.Error().Msgf("httpx version check failed: %v", err.Error())
-			}
-		} else {
-			gologger.Info().Msgf("Current httpx version %v %v", Version, updateutils.GetVersionDescription(Version, latestVersion))
-		}
 	}
 
 	if err := options.ValidateOptions(); err != nil {
@@ -693,9 +433,6 @@ func (options *Options) ValidateOptions() error {
 		return fmt.Errorf("file '%s' does not exist", options.InputRawRequest)
 	}
 
-	if options.SecretFile != "" && !fileutil.FileExists(options.SecretFile) {
-		return fmt.Errorf("secret file '%s' does not exist", options.SecretFile)
-	}
 	if options.InputMode != "" && inputformats.GetFormat(options.InputMode) == nil {
 		return fmt.Errorf("invalid input mode '%s', supported formats: %s", options.InputMode, inputformats.SupportedFormats())
 	}
@@ -795,10 +532,6 @@ func (options *Options) ValidateOptions() error {
 		gologger.Debug().Msgf("Using resolvers: %s\n", strings.Join(options.Resolvers, ","))
 	}
 
-	if options.Screenshot && !options.StoreResponse {
-		gologger.Debug().Msgf("automatically enabling store response")
-		options.StoreResponse = true
-	}
 	if options.StoreResponse && options.StoreResponseDir == "" {
 		gologger.Debug().Msgf("Store response directory not specified, using \"%s\"\n", DefaultOutputDirectory)
 		options.StoreResponseDir = DefaultOutputDirectory
@@ -822,42 +555,12 @@ func (options *Options) ValidateOptions() error {
 		options.OutputCDN = "true"
 	}
 
-	if !stringsutil.EqualFoldAny(options.Protocol, string(httpxcommon.UNKNOWN), string(httpxcommon.HTTP11)) {
-		return fmt.Errorf("invalid protocol: %s", options.Protocol)
-	}
-
 	if options.Threads == 0 {
 		gologger.Info().Msgf("Threads automatically set to %d", defaultThreads)
 		options.Threads = defaultThreads
 	}
 
 	return nil
-}
-
-// redundant with katana
-func (options *Options) ParseHeadlessOptionalArguments() map[string]string {
-	var (
-		lastKey           string
-		optionalArguments = make(map[string]string)
-	)
-	for _, v := range options.HeadlessOptionalArguments {
-		if v == "" {
-			continue
-		}
-		if argParts := strings.SplitN(v, "=", 2); len(argParts) >= 2 {
-			key := strings.TrimSpace(argParts[0])
-			value := strings.TrimSpace(argParts[1])
-			if key != "" && value != "" {
-				optionalArguments[key] = value
-				lastKey = key
-			}
-		} else if !strings.HasPrefix(v, "--") {
-			optionalArguments[lastKey] += "," + v
-		} else {
-			optionalArguments[v] = ""
-		}
-	}
-	return optionalArguments
 }
 
 // configureOutput configures the output on the screen
@@ -877,13 +580,6 @@ func (options *Options) configureOutput() {
 	}
 	if len(options.OutputMatchResponseTime) > 0 || len(options.OutputFilterResponseTime) > 0 {
 		options.OutputResponseTime = true
-	}
-	if options.CSVOutputEncoding != "" {
-		options.CSVOutput = true
-	}
-	if options.OutputFilterErrorPage && len(options.OutputFilterPageType) == 0 {
-		gologger.Info().Msg("-fep is deprecated, use -fpt error instead")
-		options.OutputFilterPageType = goflags.StringSlice{"error"}
 	}
 }
 
@@ -909,10 +605,8 @@ func (options *Options) ShouldSaveResume() bool {
 func flagsIncompatibleWithSilent(options *Options) []string {
 	var incompatibleFlagsList []string
 	for k, v := range map[string]bool{
-		"debug":          options.Debug,
-		"debug-request":  options.DebugRequests,
-		"debug-response": options.DebugResponse,
-		"verbose":        options.Verbose,
+		"debug":   options.Debug,
+		"verbose": options.Verbose,
 	} {
 		if v {
 			incompatibleFlagsList = append(incompatibleFlagsList, k)

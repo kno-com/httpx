@@ -7,36 +7,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-faker/faker/v4"
-	"github.com/go-faker/faker/v4/pkg/options"
 	mapstructure "github.com/go-viper/mapstructure/v2"
 	"github.com/projectdiscovery/dsl"
 	"github.com/projectdiscovery/gologger"
-	"github.com/projectdiscovery/retryablehttp-go"
-	mapsutil "github.com/projectdiscovery/utils/maps"
 	wappalyzer "github.com/projectdiscovery/wappalyzergo"
 
 	"github.com/projectdiscovery/httpx/common/httpx"
 )
 
-type AsnResponse struct {
-	AsNumber  string   `json:"as_number" csv:"as_number"`
-	AsName    string   `json:"as_name" csv:"as_name"`
-	AsCountry string   `json:"as_country" csv:"as_country"`
-	AsRange   []string `json:"as_range" csv:"as_range"`
-}
-
-func (o AsnResponse) String() string {
-	return fmt.Sprintf("%v, %v, %v", o.AsNumber, o.AsName, o.AsCountry)
-}
-
 // Result of a scan
 type Result struct {
 	Timestamp          time.Time                     `json:"timestamp,omitempty" csv:"timestamp" md:"timestamp" mapstructure:"timestamp"`
-	LinkRequest        []NetworkRequest              `json:"link_request,omitempty" csv:"link_request" md:"link_request" mapstructure:"link_request"`
-	ASN                *AsnResponse                  `json:"asn,omitempty" csv:"-" md:"-" mapstructure:"asn"`
 	Err                error                         `json:"-" csv:"-" md:"-" mapstructure:"-"`
-	CSPData            *httpx.CSPData                `json:"csp,omitempty" csv:"-" md:"-" mapstructure:"csp"`
 	Hashes             map[string]interface{}        `json:"hash,omitempty" csv:"-" md:"-" mapstructure:"hash"`
 	ExtractRegex       []string                      `json:"extract_regex,omitempty" csv:"extract_regex" md:"extract_regex" mapstructure:"extract_regex"`
 	CDNName            string                        `json:"cdn_name,omitempty" csv:"cdn_name" md:"cdn_name" mapstructure:"cdn_name"`
@@ -80,65 +62,17 @@ type Result struct {
 	StatusCode         int                           `json:"status_code" csv:"status_code" md:"status_code" mapstructure:"status_code"`
 	ContentLength      int                           `json:"content_length" csv:"content_length" md:"content_length" mapstructure:"content_length"`
 	Failed             bool                          `json:"failed" csv:"failed" md:"failed" mapstructure:"failed"`
-	VHost              bool                          `json:"vhost,omitempty" csv:"vhost" md:"vhost" mapstructure:"vhost"`
 	WebSocket          bool                          `json:"websocket,omitempty" csv:"websocket" md:"websocket" mapstructure:"websocket"`
 	CDN                bool                          `json:"cdn,omitempty" csv:"cdn" md:"cdn" mapstructure:"cdn"`
 	HTTP2              bool                          `json:"http2,omitempty" csv:"http2" md:"http2" mapstructure:"http2"`
-	Pipeline           bool                          `json:"pipeline,omitempty" csv:"pipeline" md:"pipeline" mapstructure:"pipeline"`
-	HeadlessBody       string                        `json:"headless_body,omitempty" csv:"headless_body" md:"headless_body" mapstructure:"headless_body"`
-	ScreenshotBytes    []byte                        `json:"screenshot_bytes,omitempty" csv:"screenshot_bytes" md:"screenshot_bytes" mapstructure:"screenshot_bytes"`
 	StoredResponsePath string                        `json:"stored_response_path,omitempty" csv:"stored_response_path" md:"stored_response_path" mapstructure:"stored_response_path"`
-	ScreenshotPath     string                        `json:"screenshot_path,omitempty" csv:"screenshot_path" md:"screenshot_path" mapstructure:"screenshot_path"`
-	ScreenshotPathRel  string                        `json:"screenshot_path_rel,omitempty" csv:"screenshot_path_rel" md:"screenshot_path_rel" mapstructure:"screenshot_path_rel"`
 	KnowledgeBase      map[string]interface{}        `json:"knowledgebase,omitempty" csv:"-" md:"-" mapstructure:"knowledgebase"`
 	Resolvers          []string                      `json:"resolvers,omitempty" csv:"resolvers" md:"resolvers" mapstructure:"resolvers"`
-	Fqdns              []string                      `json:"body_fqdn,omitempty" csv:"body_fqdn" md:"body_fqdn" mapstructure:"body_fqdn"`
-	Domains            []string                      `json:"body_domains,omitempty" csv:"body_domains" md:"body_domains" mapstructure:"body_domains"`
 	TechnologyDetails  map[string]wappalyzer.AppInfo `json:"-" csv:"-" md:"-" mapstructure:"-"`
 	RequestRaw         []byte                        `json:"-" csv:"-" md:"-" mapstructure:"-"`
 	Response           *httpx.Response               `json:"-" csv:"-" md:"-" mapstructure:"-"`
 	FaviconData        []byte                        `json:"-" csv:"-" md:"-" mapstructure:"-"`
-	Trace              *retryablehttp.TraceInfo      `json:"trace,omitempty" csv:"-" md:"-" mapstructure:"trace"`
 	FileNameHash       string                        `json:"-" csv:"-" md:"-" mapstructure:"-"`
-	CPE                []CPEInfo                     `json:"cpe,omitempty" csv:"cpe" md:"cpe" mapstructure:"cpe"`
-	WordPress          *WordPressInfo                `json:"wordpress,omitempty" csv:"wordpress" md:"wordpress" mapstructure:"wordpress"`
-}
-
-type Trace struct {
-	GetConn              time.Time `json:"get_conn,omitempty"`
-	GotConn              time.Time `json:"got_conn,omitempty"`
-	PutIdleConn          time.Time `json:"put_idle_conn,omitempty"`
-	GotFirstResponseByte time.Time `json:"got_first_response_byte,omitempty"`
-	Got100Continue       time.Time `json:"got_100_continue,omitempty"`
-	DNSStart             time.Time `json:"dns_start,omitempty"`
-	DNSDone              time.Time `json:"dns_done,omitempty"`
-	ConnectStart         time.Time `json:"connect_start,omitempty"`
-	ConnectDone          time.Time `json:"connect_done,omitempty"`
-	TLSHandshakeStart    time.Time `json:"tls_handshake_start,omitempty"`
-	TLSHandshakeDone     time.Time `json:"tls_handshake_done,omitempty"`
-	WroteHeaderField     time.Time `json:"wrote_header_field,omitempty"`
-	WroteHeaders         time.Time `json:"wrote_headers,omitempty"`
-	Wait100Continue      time.Time `json:"wait_100_continue,omitempty"`
-	WroteRequest         time.Time `json:"wrote_request,omitempty"`
-}
-
-// function to get dsl variables from result struct
-func dslVariables() ([]string, error) {
-	fakeResult := Result{}
-	fieldsToIgnore := []string{"Hashes", "ResponseHeaders", "Err", "KnowledgeBase"}
-	if err := faker.FakeData(&fakeResult, options.WithFieldsToIgnore(fieldsToIgnore...), options.WithIgnoreInterface(true)); err != nil {
-		return nil, err
-	}
-	m, err := resultToMap(fakeResult)
-	if err != nil {
-		return nil, err
-	}
-	vars := []string{"header_md5", "header_mmh3", "header_sha256", "body_md5", "body_mmh3", "body_sha256", "body_simhash"}
-	mapsutil.Walk(m, func(k string, v any) {
-		vars = append(vars, k)
-	})
-
-	return vars, nil
 }
 
 func evalDslExpr(result Result, dslExpr string) bool {

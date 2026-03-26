@@ -19,10 +19,7 @@ type Response struct {
 	RawHeaders    string
 	Words         int
 	Lines         int
-	CSPData       *CSPData
-	BodyDomains   *BodyDomain
 	HTTP2         bool
-	Pipeline      bool
 	Duration      time.Duration
 	Chain         []httputil.ChainItem
 }

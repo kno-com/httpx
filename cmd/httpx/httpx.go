@@ -1,19 +1,13 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"os"
 	"os/signal"
 	"runtime"
 	"runtime/pprof"
 
-	"github.com/logrusorgru/aurora"
 	"github.com/projectdiscovery/gologger"
-	"github.com/projectdiscovery/httpx/internal/db"
-	"github.com/projectdiscovery/httpx/internal/pdcp"
 	"github.com/projectdiscovery/httpx/runner"
-	pdcpauth "github.com/projectdiscovery/utils/auth/pdcp"
 	_ "github.com/projectdiscovery/utils/pprof"
 )
 
@@ -38,35 +32,6 @@ func main() {
 			gologger.Print().Msgf("profile: memory profiling disabled, %s", options.Memprofile)
 		}()
 	}
-
-	// validation for local results file upload
-	if options.AssetFileUpload != "" {
-		_ = setupOptionalAssetUpload(options)
-		file, err := os.Open(options.AssetFileUpload)
-		if err != nil {
-			gologger.Fatal().Msgf("Could not open file: %s\n", err)
-		}
-		defer func() {
-			_ = file.Close()
-		}()
-		dec := json.NewDecoder(file)
-		for dec.More() {
-			var r runner.Result
-			err := dec.Decode(&r)
-			if err != nil {
-				gologger.Fatal().Msgf("Could not decode jsonl file: %s\n", err)
-			}
-			options.OnResult(r)
-		}
-		options.OnClose()
-		return
-	}
-
-	// setup optional asset upload
-	_ = setupOptionalAssetUpload(options)
-
-	// setup optional database output
-	_ = setupDatabaseOutput(options)
 
 	httpxRunner, err := runner.New(options)
 	if err != nil {
@@ -98,116 +63,4 @@ func main() {
 	}
 
 	httpxRunner.Close()
-}
-
-// setupOptionalAssetUpload is used to setup optional asset upload
-// this is optional and only initialized when explicitly enabled
-func setupOptionalAssetUpload(opts *runner.Options) *pdcp.UploadWriter {
-	var mustEnable bool
-	// enable on multiple conditions
-	if opts.AssetUpload || opts.AssetID != "" || opts.AssetName != "" || pdcp.EnableCloudUpload {
-		mustEnable = true
-	}
-	a := aurora.NewAurora(!opts.NoColor)
-	if !mustEnable {
-		if !pdcp.HideAutoSaveMsg {
-			gologger.Print().Msgf("[%s] UI Dashboard is disabled, Use -dashboard option to enable", a.BrightYellow("WRN"))
-		}
-		return nil
-	}
-	gologger.Info().Msgf("To view results in UI dashboard, visit https://cloud.projectdiscovery.io/assets upon completion.")
-	h := &pdcpauth.PDCPCredHandler{}
-	creds, err := h.GetCreds()
-	if err != nil {
-		if err != pdcpauth.ErrNoCreds && !pdcp.HideAutoSaveMsg {
-			gologger.Verbose().Msgf("Could not get credentials for cloud upload: %s\n", err)
-		}
-		pdcpauth.CheckNValidateCredentials("httpx")
-		return nil
-	}
-	writer, err := pdcp.NewUploadWriterCallback(context.Background(), creds)
-	if err != nil {
-		gologger.Error().Msgf("failed to setup UI dashboard: %s", err)
-		return nil
-	}
-	if writer == nil {
-		gologger.Error().Msgf("something went wrong, could not setup UI dashboard")
-	}
-	opts.OnResult = writer.GetWriterCallback()
-	opts.OnClose = func() {
-		writer.Close()
-	}
-
-	// add additional metadata
-	if opts.AssetID != "" {
-		// silently ignore
-		writer.SetAssetID(opts.AssetID)
-	}
-	if opts.AssetName != "" {
-		// silently ignore
-		writer.SetAssetGroupName(opts.AssetName)
-	}
-	if opts.TeamID != "" {
-		writer.SetTeamID(opts.TeamID)
-	}
-	return writer
-}
-
-// setupDatabaseOutput sets up database output for storing results
-// This is optional and only initialized when explicitly enabled via -rdb flag
-func setupDatabaseOutput(opts *runner.Options) *db.Writer {
-	if !opts.ResultDatabase {
-		return nil
-	}
-
-	var cfg *db.Config
-	var err error
-
-	if opts.ResultDatabaseConfig != "" {
-		// Load configuration from file
-		cfg, err = db.LoadConfigFromFile(opts.ResultDatabaseConfig)
-		if err != nil {
-			gologger.Fatal().Msgf("Could not load database config: %s\n", err)
-		}
-	} else {
-		// Build configuration from CLI options
-		dbOpts := &db.Options{
-			Enabled:          opts.ResultDatabase,
-			Type:             opts.ResultDatabaseType,
-			ConnectionString: opts.ResultDatabaseConnStr,
-			DatabaseName:     opts.ResultDatabaseName,
-			TableName:        opts.ResultDatabaseTable,
-			BatchSize:        opts.ResultDatabaseBatchSize,
-			OmitRaw:          opts.ResultDatabaseOmitRaw,
-		}
-		cfg, err = dbOpts.ToConfig()
-		if err != nil {
-			gologger.Fatal().Msgf("Invalid database configuration: %s\n", err)
-		}
-	}
-
-	writer, err := db.NewWriter(context.Background(), cfg)
-	if err != nil {
-		gologger.Fatal().Msgf("Could not setup database output: %s\n", err)
-	}
-
-	// Chain with existing OnResult callback if present
-	existingCallback := opts.OnResult
-	opts.OnResult = func(r runner.Result) {
-		if existingCallback != nil {
-			existingCallback(r)
-		}
-		writer.GetWriterCallback()(r)
-	}
-
-	// Chain with existing OnClose callback if present
-	existingClose := opts.OnClose
-	opts.OnClose = func() {
-		writer.Close()
-		if existingClose != nil {
-			existingClose()
-		}
-	}
-
-	return writer
 }

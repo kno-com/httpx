@@ -13,12 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/microcosm-cc/bluemonday"
 	"github.com/projectdiscovery/cdncheck"
 	"github.com/projectdiscovery/fastdialer/fastdialer"
-	"github.com/projectdiscovery/httpx/common/httputilz"
 	"github.com/projectdiscovery/networkpolicy"
-	"github.com/projectdiscovery/rawhttp"
 	retryablehttp "github.com/projectdiscovery/retryablehttp-go"
 	"github.com/projectdiscovery/useragent"
 	"github.com/projectdiscovery/utils/generic"
@@ -34,7 +31,6 @@ type HTTPX struct {
 	client2       *http.Client
 	Filters       []Filter
 	Options       *Options
-	htmlPolicy    *bluemonday.Policy
 	CustomHeaders map[string]string
 	cdn           *cdncheck.Client
 	Dialer        *fastdialer.Dialer
@@ -73,7 +69,6 @@ func New(options *Options) (*HTTPX, error) {
 	var retryablehttpOptions = retryablehttp.DefaultOptionsSpraying
 	retryablehttpOptions.Timeout = httpx.Options.Timeout
 	retryablehttpOptions.RetryMax = httpx.Options.RetryMax
-	retryablehttpOptions.Trace = options.Trace
 	handleHSTS := func(req *http.Request) {
 		if req.Response.Header.Get("Strict-Transport-Security") == "" {
 			return
@@ -189,7 +184,6 @@ func New(options *Options) (*HTTPX, error) {
 		Timeout:   httpx.Options.Timeout,
 	}
 
-	httpx.htmlPolicy = bluemonday.NewPolicy()
 	httpx.CustomHeaders = httpx.Options.CustomHeaders
 
 	if options.CDNCheckClient != nil {
@@ -215,11 +209,6 @@ get_response:
 	}
 
 	var shouldIgnoreErrors, shouldIgnoreBodyErrors bool
-	if h.Options.Unsafe && req.Method == http.MethodHead && err != nil &&
-		!stringsutil.ContainsAny(err.Error(), "i/o timeout") {
-		shouldIgnoreErrors = true
-		shouldIgnoreBodyErrors = true
-	}
 
 	var resp Response
 	resp.Input = req.Host
@@ -283,11 +272,6 @@ get_response:
 
 	respbodystr := string(respbody)
 
-	// check if we need to strip html
-	if h.Options.VHostStripHTML {
-		respbodystr = h.htmlPolicy.Sanitize(respbodystr)
-	}
-
 	// if content length is not defined
 	if resp.ContentLength <= 0 {
 		// check if it's in the header and convert to int
@@ -313,47 +297,26 @@ get_response:
 		resp.Lines = len(strings.Split(strings.TrimSpace(respbodystr), "\n"))
 	}
 
-	if h.Options.ExtractFqdn {
-		resp.CSPData = h.CSPGrab(&resp)
-		resp.BodyDomains = h.BodyDomainGrab(&resp)
-	}
-
 	// build the redirect flow by reverse cycling the response<-request chain
-	if !h.Options.Unsafe {
-		chain, err := pdhttputil.GetChain(httpresp)
-		if err != nil {
-			return nil, err
-		}
-		resp.Chain = chain
+	chain, err := pdhttputil.GetChain(httpresp)
+	if err != nil {
+		return nil, err
 	}
+	resp.Chain = chain
 
 	resp.Duration = time.Since(timeStart)
 
 	return &resp, nil
 }
 
-// RequestOverride contains the URI path to override the request
+// UnsafeOptions is kept for API compatibility but unused.
 type UnsafeOptions struct {
 	URIPath string
 }
 
-// getResponse returns response from safe / unsafe request
-func (h *HTTPX) getResponse(req *retryablehttp.Request, unsafeOptions UnsafeOptions) (resp *http.Response, err error) {
-	if h.Options.Unsafe {
-		return h.doUnsafeWithOptions(req, unsafeOptions)
-	}
+// getResponse returns response for request
+func (h *HTTPX) getResponse(req *retryablehttp.Request, _ UnsafeOptions) (resp *http.Response, err error) {
 	return h.client.Do(req)
-}
-
-// doUnsafe does an unsafe http request
-func (h *HTTPX) doUnsafeWithOptions(req *retryablehttp.Request, unsafeOptions UnsafeOptions) (*http.Response, error) {
-	method := req.Method
-	headers := req.Header
-	targetURL := req.String()
-	body := req.Body
-	options := rawhttp.DefaultOptions
-	options.Timeout = h.Options.Timeout
-	return rawhttp.DoRawWithOptions(method, targetURL, unsafeOptions.URIPath, headers, body, options)
 }
 
 // Verify the http calls and apply-cascade all the filters, as soon as one matches it returns true
@@ -389,7 +352,7 @@ func (h *HTTPX) NewRequest(method, targetURL string) (req *retryablehttp.Request
 
 // NewRequest from url
 func (h *HTTPX) NewRequestWithContext(ctx context.Context, method, targetURL string) (req *retryablehttp.Request, err error) {
-	urlx, err := urlutil.ParseURL(targetURL, h.Options.Unsafe)
+	urlx, err := urlutil.ParseURL(targetURL, false)
 	if err != nil {
 		return nil, err
 	}
@@ -398,13 +361,10 @@ func (h *HTTPX) NewRequestWithContext(ctx context.Context, method, targetURL str
 	if err != nil {
 		return nil, err
 	}
-	// Skip if unsafe is used
-	if !h.Options.Unsafe {
-		// set default user agent
-		req.Header.Set("User-Agent", h.Options.DefaultUserAgent)
-		// set default encoding to accept utf8
-		req.Header.Add("Accept-Charset", "utf-8")
-	}
+	// set default user agent
+	req.Header.Set("User-Agent", h.Options.DefaultUserAgent)
+	// set default encoding to accept utf8
+	req.Header.Add("Accept-Charset", "utf-8")
 	return
 }
 
@@ -414,9 +374,6 @@ func (h *HTTPX) SetCustomHeaders(r *retryablehttp.Request, headers map[string]st
 		switch strings.ToLower(name) {
 		case "host":
 			r.Host = value
-			if h.Options.Unsafe {
-				r.Header.Set("Host", value)
-			}
 		case "cookie":
 			// cookies are set in the default branch, and reset during the follow redirect flow
 			fallthrough
@@ -428,9 +385,6 @@ func (h *HTTPX) SetCustomHeaders(r *retryablehttp.Request, headers map[string]st
 		userAgent := useragent.PickRandom()
 		r.Header.Set("User-Agent", userAgent.Raw) //nolint
 	}
-	if h.Options.AutoReferer && r.Header.Get("Referer") == "" {
-		r.Header.Set("Referer", r.String())
-	}
 }
 
 func (httpx *HTTPX) setCustomCookies(req *http.Request) {
@@ -441,13 +395,3 @@ func (httpx *HTTPX) setCustomCookies(req *http.Request) {
 	}
 }
 
-func (httpx *HTTPX) Sanitize(respStr string, trimLine, normalizeSpaces bool) string {
-	respStr = httpx.htmlPolicy.Sanitize(respStr)
-	if trimLine {
-		respStr = strings.ReplaceAll(respStr, "\n", "")
-	}
-	if normalizeSpaces {
-		respStr = httputilz.NormalizeSpaces(respStr)
-	}
-	return respStr
-}
