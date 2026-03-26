@@ -1510,90 +1510,11 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 	req := rr.req
 	target = rr.target
 
-	builder := &strings.Builder{}
-	builder.WriteString(stringz.RemoveURLDefaultPort(fullURL))
-
-	if scanopts.OutputStatusCode {
-		builder.WriteString(" [")
-		setColor := func(statusCode int) {
-			if !scanopts.OutputWithNoColor {
-				// Color the status code based on its value
-				switch {
-				case statusCode >= http.StatusOK && statusCode < http.StatusMultipleChoices:
-					builder.WriteString(aurora.Green(strconv.Itoa(statusCode)).String())
-				case statusCode >= http.StatusMultipleChoices && statusCode < http.StatusBadRequest:
-					builder.WriteString(aurora.Yellow(strconv.Itoa(statusCode)).String())
-				case statusCode >= http.StatusBadRequest && statusCode < http.StatusInternalServerError:
-					builder.WriteString(aurora.Red(strconv.Itoa(statusCode)).String())
-				case resp.StatusCode > http.StatusInternalServerError:
-					builder.WriteString(aurora.Bold(aurora.Yellow(strconv.Itoa(statusCode))).String())
-				}
-			} else {
-				builder.WriteString(strconv.Itoa(statusCode))
-			}
-		}
-		for i, chainItem := range resp.Chain {
-			setColor(chainItem.StatusCode)
-			if i != len(resp.Chain)-1 {
-				builder.WriteRune(',')
-			}
-		}
-		builder.WriteRune(']')
-	}
-
-	if scanopts.OutputLocation {
-		builder.WriteString(" [")
-		if !scanopts.OutputWithNoColor {
-			builder.WriteString(aurora.Magenta(resp.GetHeaderPart("Location", ";")).String())
-		} else {
-			builder.WriteString(resp.GetHeaderPart("Location", ";"))
-		}
-		builder.WriteRune(']')
-	}
-
-	if scanopts.OutputMethod {
-		builder.WriteString(" [")
-		if !scanopts.OutputWithNoColor {
-			builder.WriteString(aurora.Magenta(method).String())
-		} else {
-			builder.WriteString(method)
-		}
-		builder.WriteRune(']')
-	}
-
-	if scanopts.OutputContentLength {
-		builder.WriteString(" [")
-		if !scanopts.OutputWithNoColor {
-			builder.WriteString(aurora.Magenta(strconv.Itoa(resp.ContentLength)).String())
-		} else {
-			builder.WriteString(strconv.Itoa(resp.ContentLength))
-		}
-		builder.WriteRune(']')
-	}
-
-	if scanopts.OutputContentType {
-		builder.WriteString(" [")
-		if !scanopts.OutputWithNoColor {
-			builder.WriteString(aurora.Magenta(resp.GetHeaderPart("Content-Type", ";")).String())
-		} else {
-			builder.WriteString(resp.GetHeaderPart("Content-Type", ";"))
-		}
-		builder.WriteRune(']')
-	}
+	// --- Compute all data before populating Result ---
 
 	var title string
 	if httpx.CanHaveTitleTag(resp.GetHeaderPart("Content-Type", ";")) {
 		title = httpx.ExtractTitle(resp)
-	}
-
-	if scanopts.OutputTitle && title != "" {
-		builder.WriteString(" [")
-		if !scanopts.OutputWithNoColor {
-			builder.WriteString(aurora.Cyan(title).String())
-		} else {
-			builder.WriteString(title)
-		}
-		builder.WriteRune(']')
 	}
 
 	var bodyPreview string
@@ -1605,19 +1526,9 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 			bodyPreview = bodyPreview[:r.options.ResponseBodyPreviewSize]
 		}
 		bodyPreview = strings.TrimSpace(bodyPreview)
-		builder.WriteString(" [")
-		if !scanopts.OutputWithNoColor {
-			builder.WriteString(aurora.Blue(bodyPreview).String())
-		} else {
-			builder.WriteString(bodyPreview)
-		}
-		builder.WriteRune(']')
 	}
 
 	serverHeader := resp.GetHeader("Server")
-	if scanopts.OutputServerHeader {
-		_, _ = fmt.Fprintf(builder, " [%s]", serverHeader)
-	}
 
 	var (
 		serverResponseRaw  string
@@ -1641,17 +1552,11 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 
 	// web socket
 	isWebSocket := isWebSocket(resp)
-	if scanopts.OutputWebSocket && isWebSocket {
-		builder.WriteString(" [websocket]")
-	}
 
 	var http2 bool
 	// if requested probes for http2
 	if scanopts.HTTP2Probe {
 		http2 = r.probeHTTP2(hp, protocol, method, URL.String())
-		if http2 {
-			builder.WriteString(" [http2]")
-		}
 	}
 
 	var ip string
@@ -1667,10 +1572,6 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 				ip = hp.Dialer.GetDialedIP(onlyHost)
 			}
 		}
-	}
-
-	if scanopts.OutputIP || scanopts.ProbeAllIPS {
-		_, _ = fmt.Fprintf(builder, " [%s]", ip)
 	}
 
 	onlyHost, _, err := net.SplitHostPort(URL.Host)
@@ -1692,18 +1593,9 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 		}
 	}
 
-	if scanopts.OutputCName && len(cnames) > 0 {
-		// Print only the first CNAME (full list in json)
-		_, _ = fmt.Fprintf(builder, " [%s]", cnames[0])
-	}
-
 	isCDN, cdnName, cdnType, err := hp.CdnCheck(ip)
-	if scanopts.OutputCDN == "true" && isCDN && err == nil {
-		_, _ = fmt.Fprintf(builder, " [%s]", cdnName)
-	}
-
-	if scanopts.OutputResponseTime {
-		_, _ = fmt.Fprintf(builder, " [%s]", resp.Duration)
+	if err != nil {
+		isCDN = false
 	}
 
 	var technologyDetails map[string]wappalyzer.AppInfo
@@ -1717,25 +1609,11 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 	extractResult := map[string][]string{}
 	if scanopts.extractRegexps != nil {
 		extractRegexSlice, extractResult = extractRegex([]byte(resp.Raw), scanopts.extractRegexps)
-		for _, matches := range extractResult {
-			builder.WriteString(" [" + strings.Join(matches, ",") + "]")
-		}
 	}
 
 	var finalURL string
 	if resp.HasChain() {
-		// Populate finalURL with the last URL in the chain, but just print it out in CLI mode if OutputLocation is set.
-		// This way, we can still use the finalURL in JSON output.
 		finalURL = resp.GetChainLastURL()
-		if scanopts.OutputLocation {
-			builder.WriteString(" [")
-			if !scanopts.OutputWithNoColor {
-				builder.WriteString(aurora.Magenta(finalURL).String())
-			} else {
-				builder.WriteString(finalURL)
-			}
-			builder.WriteRune(']')
-		}
 	}
 
 	var faviconMMH3, faviconMD5, faviconPath, faviconURL string
@@ -1743,15 +1621,7 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 	if scanopts.Favicon {
 		var err error
 		faviconMMH3, faviconMD5, faviconPath, faviconData, faviconURL, err = r.HandleFaviconHash(hp, req, resp.Data, finalURL, true)
-		if err == nil {
-			builder.WriteString(" [")
-			if !scanopts.OutputWithNoColor {
-				builder.WriteString(aurora.Magenta(faviconMMH3).String())
-			} else {
-				builder.WriteString(faviconMMH3)
-			}
-			builder.WriteRune(']')
-		} else {
+		if err != nil {
 			gologger.Warning().Msgf("could not calculate favicon hash for path %v : %s", faviconPath, err)
 		}
 	}
@@ -1759,44 +1629,6 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 	hashesMap := make(map[string]interface{})
 	if scanopts.Hashes != "" {
 		hashesMap = computeHashes(resp.Data, resp.RawHeaders, scanopts.Hashes)
-		outputHashes := !r.options.JSONOutput //nolint
-		if outputHashes {
-			builder.WriteString(" [")
-			hs := strings.Split(scanopts.Hashes, ",")
-			for index, hashType := range hs {
-				hashType = strings.ToLower(hashType)
-				bodyKey := fmt.Sprintf("body_%s", hashType)
-				if hashBody, ok := hashesMap[bodyKey]; ok {
-					if !scanopts.OutputWithNoColor {
-						builder.WriteString(aurora.Magenta(hashBody).String())
-					} else {
-						builder.WriteString(fmt.Sprint(hashBody))
-					}
-					if index != len(hs)-1 {
-						builder.WriteString(",")
-					}
-				}
-			}
-			builder.WriteRune(']')
-		}
-	}
-	if scanopts.OutputLinesCount {
-		builder.WriteString(" [")
-		if !scanopts.OutputWithNoColor {
-			builder.WriteString(aurora.Magenta(resp.Lines).String())
-		} else {
-			_, _ = fmt.Fprintf(builder, "%d", resp.Lines)
-		}
-		builder.WriteRune(']')
-	}
-	if scanopts.OutputWordsCount {
-		builder.WriteString(" [")
-		if !scanopts.OutputWithNoColor {
-			builder.WriteString(aurora.Magenta(resp.Words).String())
-		} else {
-			_, _ = fmt.Fprintf(builder, "%d", resp.Words)
-		}
-		builder.WriteRune(']')
 	}
 
 	// store responses or chain in directory
@@ -1873,10 +1705,10 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 	if finalPath == "" {
 		finalPath = "/"
 	}
-	var chainStatusCodes []int
-	if resp.HasChain() {
-		chainStatusCodes = append(chainStatusCodes, resp.GetChainStatusCodes()...)
-	}
+
+	// Always collect chain status codes so formatOutput can render them.
+	chainStatusCodes := resp.GetChainStatusCodes()
+
 	var chainItems []httpx.ChainItem
 	if scanopts.ChainInStdout && resp.HasChain() {
 		chainItems = append(chainItems, resp.GetChainAsSlice()...)
@@ -1886,20 +1718,9 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 
 	if scanopts.TechDetect && len(technologies) > 0 {
 		sort.Strings(technologies)
-		technologies := strings.Join(technologies, ",")
-		// only print to console if tech-detect flag is enabled
-		// scanopts.TechDetect implicitly enabled for json , csv and asset-upload
-		if r.options.TechDetect {
-			builder.WriteString(" [")
-			if !scanopts.OutputWithNoColor {
-				builder.WriteString(aurora.Magenta(technologies).String())
-			} else {
-				builder.WriteString(technologies)
-			}
-			builder.WriteRune(']')
-		}
 	}
 
+	// --- Populate Result struct ---
 	result := Result{
 		Timestamp:        time.Now(),
 		Request:          request,
@@ -1918,7 +1739,6 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 		Location:         resp.GetHeaderPart("Location", ";"),
 		ContentType:      resp.GetHeaderPart("Content-Type", ";"),
 		Title:            title,
-		str:              builder.String(),
 		WebServer:        serverHeader,
 		ResponseBody:     serverResponseRaw,
 		BodyPreview:      bodyPreview,
@@ -1953,7 +1773,219 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 		FaviconData:       faviconData,
 		FileNameHash:      fileNameHash,
 	}
+
+	// --- Format CLI output string from populated Result ---
+	result.str = formatOutput(&result, scanopts, r.options)
+
 	return result
+}
+
+// formatOutput produces the bracketed CLI output string from a populated Result.
+func formatOutput(result *Result, scanopts *ScanOptions, opts *Options) string {
+	builder := &strings.Builder{}
+	builder.WriteString(stringz.RemoveURLDefaultPort(result.URL))
+
+	if scanopts.OutputStatusCode {
+		builder.WriteString(" [")
+		setColor := func(statusCode int) {
+			if !scanopts.OutputWithNoColor {
+				// Color the status code based on its value
+				switch {
+				case statusCode >= http.StatusOK && statusCode < http.StatusMultipleChoices:
+					builder.WriteString(aurora.Green(strconv.Itoa(statusCode)).String())
+				case statusCode >= http.StatusMultipleChoices && statusCode < http.StatusBadRequest:
+					builder.WriteString(aurora.Yellow(strconv.Itoa(statusCode)).String())
+				case statusCode >= http.StatusBadRequest && statusCode < http.StatusInternalServerError:
+					builder.WriteString(aurora.Red(strconv.Itoa(statusCode)).String())
+				case result.StatusCode > http.StatusInternalServerError:
+					builder.WriteString(aurora.Bold(aurora.Yellow(strconv.Itoa(statusCode))).String())
+				}
+			} else {
+				builder.WriteString(strconv.Itoa(statusCode))
+			}
+		}
+		for i, statusCode := range result.ChainStatusCodes {
+			setColor(statusCode)
+			if i != len(result.ChainStatusCodes)-1 {
+				builder.WriteRune(',')
+			}
+		}
+		builder.WriteRune(']')
+	}
+
+	if scanopts.OutputLocation {
+		builder.WriteString(" [")
+		if !scanopts.OutputWithNoColor {
+			builder.WriteString(aurora.Magenta(result.Location).String())
+		} else {
+			builder.WriteString(result.Location)
+		}
+		builder.WriteRune(']')
+	}
+
+	if scanopts.OutputMethod {
+		builder.WriteString(" [")
+		if !scanopts.OutputWithNoColor {
+			builder.WriteString(aurora.Magenta(result.Method).String())
+		} else {
+			builder.WriteString(result.Method)
+		}
+		builder.WriteRune(']')
+	}
+
+	if scanopts.OutputContentLength {
+		builder.WriteString(" [")
+		if !scanopts.OutputWithNoColor {
+			builder.WriteString(aurora.Magenta(strconv.Itoa(result.ContentLength)).String())
+		} else {
+			builder.WriteString(strconv.Itoa(result.ContentLength))
+		}
+		builder.WriteRune(']')
+	}
+
+	if scanopts.OutputContentType {
+		builder.WriteString(" [")
+		if !scanopts.OutputWithNoColor {
+			builder.WriteString(aurora.Magenta(result.ContentType).String())
+		} else {
+			builder.WriteString(result.ContentType)
+		}
+		builder.WriteRune(']')
+	}
+
+	if scanopts.OutputTitle && result.Title != "" {
+		builder.WriteString(" [")
+		if !scanopts.OutputWithNoColor {
+			builder.WriteString(aurora.Cyan(result.Title).String())
+		} else {
+			builder.WriteString(result.Title)
+		}
+		builder.WriteRune(']')
+	}
+
+	if opts.ResponseBodyPreviewSize > 0 {
+		builder.WriteString(" [")
+		if !scanopts.OutputWithNoColor {
+			builder.WriteString(aurora.Blue(result.BodyPreview).String())
+		} else {
+			builder.WriteString(result.BodyPreview)
+		}
+		builder.WriteRune(']')
+	}
+
+	if scanopts.OutputServerHeader {
+		_, _ = fmt.Fprintf(builder, " [%s]", result.WebServer)
+	}
+
+	if scanopts.OutputWebSocket && result.WebSocket {
+		builder.WriteString(" [websocket]")
+	}
+
+	if scanopts.HTTP2Probe && result.HTTP2 {
+		builder.WriteString(" [http2]")
+	}
+
+	if scanopts.OutputIP || scanopts.ProbeAllIPS {
+		_, _ = fmt.Fprintf(builder, " [%s]", result.HostIP)
+	}
+
+	if scanopts.OutputCName && len(result.CNAMEs) > 0 {
+		// Print only the first CNAME (full list in json)
+		_, _ = fmt.Fprintf(builder, " [%s]", result.CNAMEs[0])
+	}
+
+	if scanopts.OutputCDN == "true" && result.CDN {
+		_, _ = fmt.Fprintf(builder, " [%s]", result.CDNName)
+	}
+
+	if scanopts.OutputResponseTime {
+		_, _ = fmt.Fprintf(builder, " [%s]", result.ResponseTime)
+	}
+
+	// extract regex results
+	for _, matches := range result.Extracts {
+		builder.WriteString(" [" + strings.Join(matches, ",") + "]")
+	}
+
+	// final URL (location after redirect)
+	if result.FinalURL != "" && scanopts.OutputLocation {
+		builder.WriteString(" [")
+		if !scanopts.OutputWithNoColor {
+			builder.WriteString(aurora.Magenta(result.FinalURL).String())
+		} else {
+			builder.WriteString(result.FinalURL)
+		}
+		builder.WriteRune(']')
+	}
+
+	// favicon hash
+	if scanopts.Favicon && result.FavIconMMH3 != "" {
+		builder.WriteString(" [")
+		if !scanopts.OutputWithNoColor {
+			builder.WriteString(aurora.Magenta(result.FavIconMMH3).String())
+		} else {
+			builder.WriteString(result.FavIconMMH3)
+		}
+		builder.WriteRune(']')
+	}
+
+	// body hashes
+	if scanopts.Hashes != "" && !opts.JSONOutput {
+		builder.WriteString(" [")
+		hs := strings.Split(scanopts.Hashes, ",")
+		for index, hashType := range hs {
+			hashType = strings.ToLower(hashType)
+			bodyKey := fmt.Sprintf("body_%s", hashType)
+			if hashBody, ok := result.Hashes[bodyKey]; ok {
+				if !scanopts.OutputWithNoColor {
+					builder.WriteString(aurora.Magenta(hashBody).String())
+				} else {
+					builder.WriteString(fmt.Sprint(hashBody))
+				}
+				if index != len(hs)-1 {
+					builder.WriteString(",")
+				}
+			}
+		}
+		builder.WriteRune(']')
+	}
+
+	if scanopts.OutputLinesCount {
+		builder.WriteString(" [")
+		if !scanopts.OutputWithNoColor {
+			builder.WriteString(aurora.Magenta(result.Lines).String())
+		} else {
+			_, _ = fmt.Fprintf(builder, "%d", result.Lines)
+		}
+		builder.WriteRune(']')
+	}
+
+	if scanopts.OutputWordsCount {
+		builder.WriteString(" [")
+		if !scanopts.OutputWithNoColor {
+			builder.WriteString(aurora.Magenta(result.Words).String())
+		} else {
+			_, _ = fmt.Fprintf(builder, "%d", result.Words)
+		}
+		builder.WriteRune(']')
+	}
+
+	if len(result.Technologies) > 0 {
+		technologies := strings.Join(result.Technologies, ",")
+		// only print to console if tech-detect flag is enabled
+		// scanopts.TechDetect implicitly enabled for json , csv and asset-upload
+		if opts.TechDetect {
+			builder.WriteString(" [")
+			if !scanopts.OutputWithNoColor {
+				builder.WriteString(aurora.Magenta(technologies).String())
+			} else {
+				builder.WriteString(technologies)
+			}
+			builder.WriteRune(']')
+		}
+	}
+
+	return builder.String()
 }
 
 func (r *Runner) skip(URL *urlutil.URL, target httpx.Target, origInput string) (bool, Result) {
