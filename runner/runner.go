@@ -1648,8 +1648,7 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 	var http2 bool
 	// if requested probes for http2
 	if scanopts.HTTP2Probe {
-		r.ratelimiter.Take()
-		http2 = hp.SupportHTTP2(protocol, method, URL.String())
+		http2 = r.probeHTTP2(hp, protocol, method, URL.String())
 		if http2 {
 			builder.WriteString(" [http2]")
 		}
@@ -1707,27 +1706,19 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 		_, _ = fmt.Fprintf(builder, " [%s]", resp.Duration)
 	}
 
-	technologyDetails := make(map[string]wappalyzer.AppInfo)
+	var technologyDetails map[string]wappalyzer.AppInfo
 	var technologies []string
 	if scanopts.TechDetect {
-		matches := r.wappalyzer.FingerprintWithInfo(resp.Headers, resp.Data)
-		for match, data := range matches {
-			technologies = append(technologies, match)
-			technologyDetails[match] = data
-		}
+		technologies, technologyDetails = r.extractTech(resp)
 	}
 
-	var extractRegex []string
+	var extractRegexSlice []string
 	// extract regex
-	var extractResult = map[string][]string{}
+	extractResult := map[string][]string{}
 	if scanopts.extractRegexps != nil {
-		for regex, compiledRegex := range scanopts.extractRegexps {
-			matches := compiledRegex.FindAllString(string(resp.Raw), -1)
-			if len(matches) > 0 {
-				matches = sliceutil.Dedupe(matches)
-				builder.WriteString(" [" + strings.Join(matches, ",") + "]")
-				extractResult[regex] = matches
-			}
+		extractRegexSlice, extractResult = extractRegex([]byte(resp.Raw), scanopts.extractRegexps)
+		for _, matches := range extractResult {
+			builder.WriteString(" [" + strings.Join(matches, ",") + "]")
 		}
 	}
 
@@ -1767,55 +1758,25 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 
 	hashesMap := make(map[string]interface{})
 	if scanopts.Hashes != "" {
-		hs := strings.Split(scanopts.Hashes, ",")
+		hashesMap = computeHashes(resp.Data, resp.RawHeaders, scanopts.Hashes)
 		outputHashes := !r.options.JSONOutput //nolint
 		if outputHashes {
 			builder.WriteString(" [")
-		}
-		for index, hashType := range hs {
-			var (
-				hashHeader, hashBody string
-			)
-			hashType = strings.ToLower(hashType)
-			switch hashType {
-			case "md5":
-				hashBody = hashes.Md5(resp.Data)
-				hashHeader = hashes.Md5([]byte(resp.RawHeaders))
-			case "mmh3":
-				hashBody = hashes.Mmh3(resp.Data)
-				hashHeader = hashes.Mmh3([]byte(resp.RawHeaders))
-			case "sha1":
-				hashBody = hashes.Sha1(resp.Data)
-				hashHeader = hashes.Sha1([]byte(resp.RawHeaders))
-			case "sha256":
-				hashBody = hashes.Sha256(resp.Data)
-				hashHeader = hashes.Sha256([]byte(resp.RawHeaders))
-			case "sha512":
-				hashBody = hashes.Sha512(resp.Data)
-				hashHeader = hashes.Sha512([]byte(resp.RawHeaders))
-			case "simhash":
-				hashBody = hashes.Simhash(resp.Data)
-				// Header simhash is omitted: volatile headers (Date, Set-Cookie,
-				// X-Request-Id, CF-RAY, etc.) make it unreliable across requests.
-			}
-			if hashBody != "" {
-				hashesMap[fmt.Sprintf("body_%s", hashType)] = hashBody
-				if hashHeader != "" {
-					hashesMap[fmt.Sprintf("header_%s", hashType)] = hashHeader
-				}
-				if outputHashes {
+			hs := strings.Split(scanopts.Hashes, ",")
+			for index, hashType := range hs {
+				hashType = strings.ToLower(hashType)
+				bodyKey := fmt.Sprintf("body_%s", hashType)
+				if hashBody, ok := hashesMap[bodyKey]; ok {
 					if !scanopts.OutputWithNoColor {
 						builder.WriteString(aurora.Magenta(hashBody).String())
 					} else {
-						builder.WriteString(hashBody)
+						builder.WriteString(fmt.Sprint(hashBody))
 					}
 					if index != len(hs)-1 {
 						builder.WriteString(",")
 					}
 				}
 			}
-		}
-		if outputHashes {
 			builder.WriteRune(']')
 		}
 	}
@@ -1983,7 +1944,7 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 		Extracts:         extractResult,
 		Lines:            resp.Lines,
 		Words:            resp.Words,
-		ExtractRegex:     extractRegex,
+		ExtractRegex:     extractRegexSlice,
 		KnowledgeBase: r.classifyPage(respData, pHash),
 		TechnologyDetails: technologyDetails,
 		Resolvers:         resolvers,
@@ -2007,6 +1968,78 @@ func (r *Runner) skip(URL *urlutil.URL, target httpx.Target, origInput string) (
 	}
 
 	return false, Result{}
+}
+
+// probeHTTP2 checks if the target supports HTTP/2 via H2C upgrade or TLS ALPN.
+func (r *Runner) probeHTTP2(hp *httpx.HTTPX, protocol, method, targetURL string) bool {
+	r.ratelimiter.Take()
+	return hp.SupportHTTP2(protocol, method, targetURL)
+}
+
+// computeHashes computes the requested hash types over the response body and headers.
+func computeHashes(respData []byte, rawHeaders string, hashTypes string) map[string]interface{} {
+	hashesMap := make(map[string]interface{})
+	hs := strings.Split(hashTypes, ",")
+	for _, hashType := range hs {
+		var (
+			hashHeader, hashBody string
+		)
+		hashType = strings.ToLower(hashType)
+		switch hashType {
+		case "md5":
+			hashBody = hashes.Md5(respData)
+			hashHeader = hashes.Md5([]byte(rawHeaders))
+		case "mmh3":
+			hashBody = hashes.Mmh3(respData)
+			hashHeader = hashes.Mmh3([]byte(rawHeaders))
+		case "sha1":
+			hashBody = hashes.Sha1(respData)
+			hashHeader = hashes.Sha1([]byte(rawHeaders))
+		case "sha256":
+			hashBody = hashes.Sha256(respData)
+			hashHeader = hashes.Sha256([]byte(rawHeaders))
+		case "sha512":
+			hashBody = hashes.Sha512(respData)
+			hashHeader = hashes.Sha512([]byte(rawHeaders))
+		case "simhash":
+			hashBody = hashes.Simhash(respData)
+			// Header simhash is omitted: volatile headers (Date, Set-Cookie,
+			// X-Request-Id, CF-RAY, etc.) make it unreliable across requests.
+		}
+		if hashBody != "" {
+			hashesMap[fmt.Sprintf("body_%s", hashType)] = hashBody
+			if hashHeader != "" {
+				hashesMap[fmt.Sprintf("header_%s", hashType)] = hashHeader
+			}
+		}
+	}
+	return hashesMap
+}
+
+// extractTech runs wappalyzer fingerprinting against the response.
+func (r *Runner) extractTech(resp *httpx.Response) ([]string, map[string]wappalyzer.AppInfo) {
+	technologyDetails := make(map[string]wappalyzer.AppInfo)
+	var technologies []string
+	matches := r.wappalyzer.FingerprintWithInfo(resp.Headers, resp.Data)
+	for match, data := range matches {
+		technologies = append(technologies, match)
+		technologyDetails[match] = data
+	}
+	return technologies, technologyDetails
+}
+
+// extractRegex runs user-supplied regexes against the raw response.
+func extractRegex(rawResp []byte, regexps map[string]*regexp.Regexp) ([]string, map[string][]string) {
+	var extractRegexResults []string
+	extractResult := map[string][]string{}
+	for regex, compiledRegex := range regexps {
+		matches := compiledRegex.FindAllString(string(rawResp), -1)
+		if len(matches) > 0 {
+			matches = sliceutil.Dedupe(matches)
+			extractResult[regex] = matches
+		}
+	}
+	return extractRegexResults, extractResult
 }
 
 func (r *Runner) HandleFaviconHash(hp *httpx.HTTPX, req *retryablehttp.Request, currentResp []byte, finalURL string, defaultProbe bool) (string, string, string, []byte, string, error) {
