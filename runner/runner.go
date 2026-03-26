@@ -83,6 +83,19 @@ type Runner struct {
 	interruptCh        chan struct{}
 }
 
+// requestResult holds the output of executeRequest for use by probes and formatOutput.
+type requestResult struct {
+	resp        *httpx.Response
+	requestDump []byte
+	fullURL     string
+	parsedURL   *urlutil.URL
+	protocol    string
+	method      string
+	origInput   string
+	req         *retryablehttp.Request
+	target      httpx.Target
+}
+
 func (r *Runner) HTTPX() *httpx.HTTPX {
 	return r.hp
 }
@@ -1308,7 +1321,7 @@ func (r *Runner) targets(hp *httpx.HTTPX, target string) chan httpx.Target {
 	return results
 }
 
-func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, method, origInput string, scanopts *ScanOptions) Result {
+func (r *Runner) executeRequest(hp *httpx.HTTPX, protocol string, target httpx.Target, method, origInput string, scanopts *ScanOptions) (*requestResult, *Result) {
 	origProtocol := protocol
 	if protocol == httpx.HTTPorHTTPS || protocol == httpx.HTTPandHTTPS {
 		protocol = determineMostLikelySchemeOrder(target.Host)
@@ -1317,7 +1330,7 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 retry:
 	URL, err := r.parseURL(target.Host)
 	if err != nil {
-		return Result{URL: target.Host, Input: origInput, Err: err}
+		return nil, &Result{URL: target.Host, Input: origInput, Err: err}
 	}
 
 	// check if we have to skip the host:port as a result of a previous failure
@@ -1325,14 +1338,14 @@ retry:
 	if r.options.HostMaxErrors >= 0 && r.HostErrorsCache.Has(hostPort) {
 		numberOfErrors, err := r.HostErrorsCache.GetIFPresent(hostPort)
 		if err == nil && numberOfErrors >= r.options.HostMaxErrors {
-			return Result{URL: target.Host, Err: errors.New("skipping as previously unresponsive")}
+			return nil, &Result{URL: target.Host, Err: errors.New("skipping as previously unresponsive")}
 		}
 	}
 
 	// check if the combination host:port should be skipped if belonging to a cdn
 	skip, reason := r.skip(URL, target, origInput)
 	if skip {
-		return reason
+		return nil, &reason
 	}
 
 	URL.Scheme = protocol
@@ -1363,7 +1376,7 @@ retry:
 	}
 	req, err = hp.NewRequestWithContext(ctx, method, URL.String())
 	if err != nil {
-		return Result{URL: URL.String(), Input: origInput, Err: err}
+		return nil, &Result{URL: URL.String(), Input: origInput, Err: err}
 	}
 
 	if target.CustomHost != "" {
@@ -1400,7 +1413,7 @@ retry:
 	var errDump error
 	requestDump, errDump = httputil.DumpRequestOut(req.Request, true)
 	if errDump != nil {
-		return Result{URL: URL.String(), Input: origInput, Err: errDump}
+		return nil, &Result{URL: URL.String(), Input: origInput, Err: errDump}
 	}
 	// The original req.Body gets modified indirectly by httputil.DumpRequestOut so we set it again to nil if it was empty
 	// Otherwise redirects like 307/308 would fail (as they require the body to be sent along)
@@ -1411,7 +1424,7 @@ retry:
 	// fix the final output url
 	fullURL := req.String()
 	if parsedURL, errParse := r.parseURL(fullURL); errParse != nil {
-		return Result{URL: URL.String(), Input: origInput, Err: errParse}
+		return nil, &Result{URL: URL.String(), Input: origInput, Err: errParse}
 	} else {
 		if !stringsutil.HasSuffixAny(fullURL, scanopts.RequestURI) {
 			parsedURL.Path = scanopts.RequestURI
@@ -1427,9 +1440,6 @@ retry:
 		gologger.Info().Msgf("Dumped HTTP response for %s\n\n", fullURL)
 		gologger.Print().Msgf("%s", string(resp.Raw))
 	}
-
-	builder := &strings.Builder{}
-	builder.WriteString(stringz.RemoveURLDefaultPort(fullURL))
 
 	if err != nil {
 		errString := ""
@@ -1468,8 +1478,40 @@ retry:
 			}
 		}
 
-		return Result{URL: URL.String(), Input: origInput, Timestamp: time.Now(), Err: err}
+		return nil, &Result{URL: URL.String(), Input: origInput, Timestamp: time.Now(), Err: err}
 	}
+
+	return &requestResult{
+		resp:        resp,
+		requestDump: requestDump,
+		fullURL:     fullURL,
+		parsedURL:   URL,
+		protocol:    protocol,
+		method:      method,
+		origInput:   origInput,
+		req:         req,
+		target:      target,
+	}, nil
+}
+
+func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, method, origInput string, scanopts *ScanOptions) Result {
+	rr, errResult := r.executeRequest(hp, protocol, target, method, origInput, scanopts)
+	if errResult != nil {
+		return *errResult
+	}
+
+	resp := rr.resp
+	requestDump := rr.requestDump
+	fullURL := rr.fullURL
+	URL := rr.parsedURL
+	protocol = rr.protocol
+	method = rr.method
+	origInput = rr.origInput
+	req := rr.req
+	target = rr.target
+
+	builder := &strings.Builder{}
+	builder.WriteString(stringz.RemoveURLDefaultPort(fullURL))
 
 	if scanopts.OutputStatusCode {
 		builder.WriteString(" [")
@@ -1632,8 +1674,7 @@ retry:
 		_, _ = fmt.Fprintf(builder, " [%s]", ip)
 	}
 
-	var onlyHost string
-	onlyHost, _, err = net.SplitHostPort(URL.Host)
+	onlyHost, _, err := net.SplitHostPort(URL.Host)
 	if err != nil {
 		onlyHost = URL.Host
 	}
